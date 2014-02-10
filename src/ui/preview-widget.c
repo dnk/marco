@@ -398,7 +398,11 @@ meta_preview_size_request (GtkWidget      *widget,
     {
       GtkRequisition child_requisition;
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+      gtk_widget_get_preferred_size(child, NULL, &child_requisition);
+#else
       gtk_widget_size_request (child, &child_requisition);
+#endif
 
       req->width += child_requisition.width;
       req->height += child_requisition.height;

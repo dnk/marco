@@ -111,10 +111,17 @@ render_simple (
                gboolean    with_alpha)
 {
   GdkPixbuf *pixbuf;
+#if GTK_CHECK_VERSION(3, 0, 0)
+  GdkRGBA  from, to;
+
+  gdk_rgba_parse (&from, "blue");
+  gdk_rgba_parse (&to, "green");
+#else
   GdkColor from, to;
   
   gdk_color_parse ("blue", &from);
   gdk_color_parse ("green", &to);
+#endif
 
   pixbuf = meta_gradient_create_simple (width, height,
                                         &from, &to,
@@ -222,6 +229,16 @@ render_multi (
 {
   GdkPixbuf *pixbuf;
 #define N_COLORS 5
+
+#if GTK_CHECK_VERSION(3, 0, 0)
+  GdkRGBA colors[N_COLORS];
+
+  gdk_rgba_parse (&colors[0], "red");
+  gdk_rgba_parse (&colors[1], "blue");
+  gdk_rgba_parse (&colors[2], "orange");
+  gdk_rgba_parse (&colors[3], "pink");
+  gdk_rgba_parse (&colors[4], "green");
+#else
   GdkColor colors[N_COLORS];
 
   gdk_color_parse ("red", &colors[0]);
@@ -229,6 +246,7 @@ render_multi (
   gdk_color_parse ("orange", &colors[2]);
   gdk_color_parse ("pink", &colors[3]);
   gdk_color_parse ("green", &colors[4]);
+#endif
 
   pixbuf = meta_gradient_create_multi (width, height,
                                        colors, N_COLORS,
@@ -412,7 +430,7 @@ meta_gradient_test (void)
 
   window = create_gradient_window ("Multi vertical",
                                    render_vertical_multi_func);
-  
+
   window = create_gradient_window ("Multi horizontal",
                                    render_horizontal_multi_func);
 

@@ -31,27 +31,57 @@
  */
 static GdkPixbuf* meta_gradient_create_horizontal       (int             width,
                                                          int             height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+							 const GdkRGBA  *from,
+							 const GdkRGBA  *to
+#else
                                                          const GdkColor *from,
-                                                         const GdkColor *to);
+                                                         const GdkColor *to
+#endif
+							);
 static GdkPixbuf* meta_gradient_create_vertical         (int             width,
                                                          int             height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+							 const GdkRGBA  *from,
+							 const GdkRGBA  *to
+#else
                                                          const GdkColor *from,
-                                                         const GdkColor *to);
+                                                         const GdkColor *to
+#endif
+							);
 static GdkPixbuf* meta_gradient_create_diagonal         (int             width,
                                                          int             height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+							 const GdkRGBA  *from,
+							 const GdkRGBA  *to
+#else
                                                          const GdkColor *from,
-                                                         const GdkColor *to);
+                                                         const GdkColor *to
+#endif
+							);
 static GdkPixbuf* meta_gradient_create_multi_horizontal (int             width,
                                                          int             height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                                         const GdkRGBA  *colors,
+#else
                                                          const GdkColor *colors,
+#endif
                                                          int             count);
 static GdkPixbuf* meta_gradient_create_multi_vertical   (int             width,
                                                          int             height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+							 const GdkRGBA  *colors,
+#else
                                                          const GdkColor *colors,
+#endif
                                                          int             count);
 static GdkPixbuf* meta_gradient_create_multi_diagonal   (int             width,
                                                          int             height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+							 const GdkRGBA  *colors,
+#else
                                                          const GdkColor *colors,
+#endif
                                                          int             count);
 
 
@@ -90,8 +120,13 @@ blank_pixbuf (int width, int height, gboolean no_padding)
 GdkPixbuf*
 meta_gradient_create_simple (int              width,
                              int              height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                             const GdkRGBA   *from,
+                             const GdkRGBA   *to,
+#else
                              const GdkColor  *from,
                              const GdkColor  *to,
+#endif
                              MetaGradientType style)
 {
   switch (style)
@@ -116,7 +151,11 @@ meta_gradient_create_simple (int              width,
 GdkPixbuf*
 meta_gradient_create_multi (int              width,
                             int              height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                            const GdkRGBA   *colors,
+#else
                             const GdkColor  *colors,
+#endif
                             int              n_colors,
                             MetaGradientType style)
 {
@@ -257,8 +296,14 @@ meta_gradient_create_interwoven (int            width,
  */
 static GdkPixbuf*
 meta_gradient_create_horizontal (int width, int height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                 const GdkRGBA  *from,
+                                 const GdkRGBA  *to
+#else
                                  const GdkColor *from,
-                                 const GdkColor *to)
+                                 const GdkColor *to
+#endif
+                                )
 {    
   int i;
   long r, g, b, dr, dg, db;
@@ -269,6 +314,23 @@ meta_gradient_create_horizontal (int width, int height,
   int rf, gf, bf;
   int rowstride;
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+  cairo_surface_t * s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+
+  cairo_pattern_t *pattern = cairo_pattern_create_linear(0, 0, width, 0);
+  cairo_pattern_add_color_stop_rgba(pattern, 0, from->red, from->green, from->blue, from->alpha);
+  cairo_pattern_add_color_stop_rgba(pattern, width, to->red, to->green, to->blue, to->alpha);
+
+  cairo_t * cr = cairo_create(s);
+  cairo_set_source(cr, pattern);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+
+  pixbuf = gdk_pixbuf_get_from_surface(s, 0, 0, width, height);
+
+  cairo_surface_destroy(s);
+#else
   pixbuf = blank_pixbuf (width, height, FALSE);
   if (pixbuf == NULL)
     return NULL;
@@ -307,6 +369,7 @@ meta_gradient_create_horizontal (int width, int height,
     {
       memcpy (&(pixels[i*rowstride]), pixels, rowstride);
     }
+#endif
   return pixbuf;
 }
 
@@ -325,8 +388,14 @@ meta_gradient_create_horizontal (int width, int height,
  */
 static GdkPixbuf*
 meta_gradient_create_vertical (int width, int height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                               const GdkRGBA  *from,
+                               const GdkRGBA  *to
+#else
                                const GdkColor *from,
-                               const GdkColor *to)
+                               const GdkColor *to
+#endif
+                               )
 {
   int i, j;
   long r, g, b, dr, dg, db;
@@ -336,7 +405,24 @@ meta_gradient_create_vertical (int width, int height,
   int rf, gf, bf;
   int rowstride;
   unsigned char *pixels;
-  
+
+#if GTK_CHECK_VERSION(3, 0, 0)
+  cairo_surface_t * s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+
+  cairo_pattern_t *pattern = cairo_pattern_create_linear(0, 0, 0, height);
+  cairo_pattern_add_color_stop_rgba(pattern, 0, from->red, from->green, from->blue, from->alpha);
+  cairo_pattern_add_color_stop_rgba(pattern, height, to->red, to->green, to->blue, to->alpha);
+
+  cairo_t * cr = cairo_create(s);
+  cairo_set_source(cr, pattern);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+
+  pixbuf = gdk_pixbuf_get_from_surface(s, 0, 0, width, height);
+
+  cairo_surface_destroy(s);
+#else
   pixbuf = blank_pixbuf (width, height, FALSE);
   if (pixbuf == NULL)
     return NULL;
@@ -375,6 +461,7 @@ meta_gradient_create_vertical (int width, int height,
       g+=dg;
       b+=db;
     }
+#endif
   return pixbuf;
 }
 
@@ -396,8 +483,14 @@ meta_gradient_create_vertical (int width, int height,
 
 static GdkPixbuf*
 meta_gradient_create_diagonal (int width, int height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                               const GdkRGBA  *from,
+                               const GdkRGBA  *to
+#else
                                const GdkColor *from,
-                               const GdkColor *to)
+                               const GdkColor *to
+#endif
+                              )
 {
   GdkPixbuf *pixbuf, *tmp;
   int j;
@@ -444,19 +537,60 @@ meta_gradient_create_diagonal (int width, int height,
 
 static GdkPixbuf*
 meta_gradient_create_multi_horizontal (int width, int height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                       const GdkRGBA  *colors,
+#else
                                        const GdkColor *colors,
+#endif
                                        int count)
 {
+#if GTK_CHECK_VERSION(3, 0, 0)
+  int i;
+#else
   int i, j, k;
   long r, g, b, dr, dg, db;
+#endif
   GdkPixbuf *pixbuf;
+#if !GTK_CHECK_VERSION(3, 0, 0)
   unsigned char *ptr;
   unsigned char *pixels;
-  int width2;  
+#endif
+  int width2;
+
+#if !GTK_CHECK_VERSION(3, 0, 0)
   int rowstride;
-  
+#endif
+
   g_return_val_if_fail (count > 2, NULL);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+  cairo_surface_t * s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+
+  if (count > width)
+    count = width;
+
+  if (count > 1)
+    width2 = width/(count-1);
+  else
+    width2 = width;
+
+  cairo_pattern_t *pattern = cairo_pattern_create_linear(0, 0, width, 0);
+  cairo_pattern_add_color_stop_rgba(pattern, 0, colors[0].red, colors[0].green, colors[0].blue, colors[0].alpha);
+
+  for (i=1; i<count; i++) {
+    cairo_pattern_add_color_stop_rgba(pattern, width2, colors[i].red, colors[i].green, colors[i].blue, colors[i].alpha);
+  }
+
+  cairo_t * cr = cairo_create(s);
+  cairo_set_source(cr, pattern);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+
+  pixbuf = gdk_pixbuf_get_from_surface(s, 0, 0, width, height);
+
+  cairo_surface_destroy(s);
+#else
   pixbuf = blank_pixbuf (width, height, FALSE);
   if (pixbuf == NULL)
     return NULL;
@@ -511,12 +645,17 @@ meta_gradient_create_multi_horizontal (int width, int height,
     {
       memcpy (&(pixels[i*rowstride]), pixels, rowstride);
     }
+#endif
   return pixbuf;
 }
 
 static GdkPixbuf*
 meta_gradient_create_multi_vertical (int width, int height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                     const GdkRGBA  *colors,
+#else
                                      const GdkColor *colors,
+#endif
                                      int count)
 {
   int i, j, k;
@@ -529,6 +668,34 @@ meta_gradient_create_multi_vertical (int width, int height,
   
   g_return_val_if_fail (count > 2, NULL);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+  cairo_surface_t * s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+
+  if (count > height)
+    count = height;
+
+  if (count > 1)
+    height2 = height/(count-1);
+  else
+    height2 = height;
+
+  cairo_pattern_t *pattern = cairo_pattern_create_linear(0, 0, 0, height);
+  cairo_pattern_add_color_stop_rgba(pattern, 0, colors[0].red, colors[0].green, colors[0].blue, colors[0].alpha);
+
+  for (i=1; i<count; i++) {
+    cairo_pattern_add_color_stop_rgba(pattern, height2, colors[i].red, colors[i].green, colors[i].blue, colors[i].alpha);
+  }
+
+  cairo_t * cr = cairo_create(s);
+  cairo_set_source(cr, pattern);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+
+  pixbuf = gdk_pixbuf_get_from_surface(s, 0, 0, width, height);
+
+  cairo_surface_destroy(s);
+#else
   pixbuf = blank_pixbuf (width, height, FALSE);
   if (pixbuf == NULL)
     return NULL;
@@ -599,14 +766,19 @@ meta_gradient_create_multi_vertical (int width, int height,
           ptr += rowstride;
         }
     }
-    
+#endif
+
   return pixbuf;
 }
 
 
 static GdkPixbuf*
 meta_gradient_create_multi_diagonal (int width, int height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                     const GdkRGBA  *colors,
+#else
                                      const GdkColor *colors,
+#endif
                                      int count)
 {
   GdkPixbuf *pixbuf, *tmp;

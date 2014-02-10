@@ -26,6 +26,7 @@
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gdk/gdk.h>
+#include <gtk/gtk.h>
 
 typedef enum
 {
@@ -37,12 +38,21 @@ typedef enum
 
 GdkPixbuf* meta_gradient_create_simple     (int               width,
                                             int               height,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                            const GdkRGBA    *from,
+                                            const GdkRGBA    *to,
+#else
                                             const GdkColor   *from,
                                             const GdkColor   *to,
+#endif
                                             MetaGradientType  style);
 GdkPixbuf* meta_gradient_create_multi      (int               width,
                                             int               height,
+                                            #if GTK_CHECK_VERSION(3, 0, 0)
+                                            const GdkRGBA    *colors,
+                                            #else
                                             const GdkColor   *colors,
+                                            #endif
                                             int               n_colors,
                                             MetaGradientType  style);
 GdkPixbuf* meta_gradient_create_interwoven (int               width,

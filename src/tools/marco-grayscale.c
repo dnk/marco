@@ -81,7 +81,9 @@ main (int argc, char **argv)
       return 1;
     }
 
+#if !GLIB_CHECK_VERSION(2, 34, 0)
   g_type_init ();
+#endif
   
   err = NULL;
   pixbuf = gdk_pixbuf_new_from_file (argv[1], &err);
