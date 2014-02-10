@@ -890,7 +890,12 @@ MetaColorSpec* meta_color_spec_new_gtk         (MetaGtkColorComponent component,
 void           meta_color_spec_free            (MetaColorSpec     *spec);
 void           meta_color_spec_render          (MetaColorSpec     *spec,
                                                 GtkWidget         *widget,
-                                                GdkColor          *color);
+						#if GTK_CHECK_VERSION(3, 0, 0)
+                                                GdkRGBA           *color
+						#else
+                                                GdkColor          *color
+                                                #endif
+                                                );
 
 
 MetaDrawOp*    meta_draw_op_new  (MetaDrawType        type);

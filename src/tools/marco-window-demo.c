@@ -338,8 +338,12 @@ utility_cb (gpointer             callback_data,
   gtk_window_set_title (GTK_WINDOW (window), "Utility");
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
-  
+
+#if GTK_CHECK_VERSION( 3, 2, 0)
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
   vbox = gtk_vbox_new (FALSE, 0);
+#endif
 
   gtk_container_add (GTK_CONTAINER (window), vbox);
 
@@ -372,8 +376,12 @@ toolbar_cb (gpointer             callback_data,
   gtk_window_set_title (GTK_WINDOW (window), "Toolbar");
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
-  
+
+#if GTK_CHECK_VERSION( 3, 2, 0)
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
   vbox = gtk_vbox_new (FALSE, 0);
+#endif
 
   gtk_container_add (GTK_CONTAINER (window), vbox);
 
@@ -397,8 +405,12 @@ menu_cb (gpointer             callback_data,
   gtk_window_set_title (GTK_WINDOW (window), "Menu");
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
-  
+
+#if GTK_CHECK_VERSION( 3, 2, 0)
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
   vbox = gtk_vbox_new (FALSE, 0);
+#endif
 
   gtk_container_add (GTK_CONTAINER (window), vbox);
 
@@ -419,8 +431,12 @@ override_redirect_cb (gpointer             callback_data,
   
   window = gtk_window_new (GTK_WINDOW_POPUP);
   gtk_window_set_title (GTK_WINDOW (window), "Override Redirect");
-  
+
+#if GTK_CHECK_VERSION( 3, 2, 0)
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
   vbox = gtk_vbox_new (FALSE, 0);
+#endif
 
   gtk_container_add (GTK_CONTAINER (window), vbox);
 
@@ -444,8 +460,12 @@ border_only_cb (gpointer             callback_data,
   gtk_window_set_title (GTK_WINDOW (window), "Border only");
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
-  
+
+#if GTK_CHECK_VERSION( 3, 2, 0)
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
   vbox = gtk_vbox_new (FALSE, 0);
+#endif
 
   gtk_container_add (GTK_CONTAINER (window), vbox);
 
@@ -536,10 +556,18 @@ splashscreen_cb (gpointer             callback_data,
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   set_gtk_window_type (GTK_WINDOW (window), "_NET_WM_WINDOW_TYPE_SPLASHSCREEN");
   gtk_window_set_title (GTK_WINDOW (window), "Splashscreen");
-  
+
+#if GTK_CHECK_VERSION(3, 2, 0)
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
   vbox = gtk_vbox_new (FALSE, 0);
+#endif
   
+#if GTK_CHECK_VERSION(3, 10, 0)
+  image = gtk_image_new_from_icon_name ("dialog-information", GTK_ICON_SIZE_DIALOG);
+#else
   image = gtk_image_new_from_stock (GTK_STOCK_DIALOG_INFO, GTK_ICON_SIZE_DIALOG);
+#endif
   gtk_box_pack_start (GTK_BOX (vbox), image, FALSE, FALSE, 0);
 
   gtk_box_pack_start (GTK_BOX (vbox), focus_label (window), FALSE, FALSE, 0);  
@@ -572,12 +600,20 @@ make_dock (int type)
   switch (type)
     {
     case DOCK_LEFT:
-    case DOCK_RIGHT:      
+    case DOCK_RIGHT:
+#if GTK_CHECK_VERSION( 3, 2, 0)
+      box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
       box = gtk_vbox_new (FALSE, 0);
+#endif
       break;
     case DOCK_TOP:
     case DOCK_BOTTOM:
+#if GTK_CHECK_VERSION( 3, 2, 0)
+      box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+#else
       box = gtk_hbox_new (FALSE, 0);
+#endif
       break;
     case DOCK_ALL:
       break;
@@ -585,8 +621,13 @@ make_dock (int type)
 
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   set_gtk_window_type (GTK_WINDOW (window), "_NET_WM_WINDOW_TYPE_DOCK");
-  
+
+#if GTK_CHECK_VERSION(3, 10, 0)
+  image = gtk_image_new_from_icon_name ("dialog-information", GTK_ICON_SIZE_DIALOG);
+#else
   image = gtk_image_new_from_stock (GTK_STOCK_DIALOG_INFO, GTK_ICON_SIZE_DIALOG);
+#endif
+
   gtk_box_pack_start (GTK_BOX (box), image, FALSE, FALSE, 0);  
   
   gtk_box_pack_start (GTK_BOX (box), focus_label (window), FALSE, FALSE, 0);  
@@ -677,7 +718,11 @@ desktop_cb (gpointer             callback_data,
 {
   GtkWidget *window;
   GtkWidget *label;
+#if GTK_CHECK_VERSION(3, 0, 0)
+  GdkRGBA desktop_color;
+#else
   GdkColor desktop_color;
+#endif
   
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   set_gtk_window_type (GTK_WINDOW (window), "_NET_WM_WINDOW_TYPE_DESKTOP");
@@ -685,12 +730,23 @@ desktop_cb (gpointer             callback_data,
   gtk_widget_set_size_request (window,
                                gdk_screen_width (), gdk_screen_height ());
   gtk_window_move (GTK_WINDOW (window), 0, 0);
-  
+
+#if GTK_CHECK_VERSION(3, 0, 0)
+  desktop_color.red = 1.0 * 0x5144/0xffff;
+  desktop_color.green = 1.0 * 0x75D6/0xffff;
+  desktop_color.blue = 1.0 * 0xA699/0xffff;
+  desktop_color.alpha = 1.0;
+#else
   desktop_color.red = 0x5144;
   desktop_color.green = 0x75D6;
   desktop_color.blue = 0xA699;
+#endif
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+  gtk_widget_override_background_color(window, GTK_STATE_NORMAL, &desktop_color);
+#else
   gtk_widget_modify_bg (window, GTK_STATE_NORMAL, &desktop_color);
+#endif
   
   label = focus_label (window);
   
@@ -926,8 +982,12 @@ do_appwindow (void)
   
   g_signal_connect (G_OBJECT (window), "destroy",
                     G_CALLBACK (destroy_cb), NULL);
-      
+
+#if GTK_CHECK_VERSION(3, 4, 0)
+  table = gtk_grid_new();
+#else
   table = gtk_table_new (1, 4, FALSE);
+#endif
       
   gtk_container_add (GTK_CONTAINER (window), table);
 
@@ -1016,7 +1076,12 @@ do_appwindow (void)
    */
   toolbar = gtk_toolbar_new ();
 
+#if GTK_CHECK_VERSION(3, 10, 0)
+  GtkWidget *newButtonIcon = gtk_image_new_from_icon_name("document-new", GTK_ICON_SIZE_SMALL_TOOLBAR);
+  GtkToolItem *newButton = gtk_tool_button_new(newButtonIcon, "_New");
+#else
   GtkToolItem *newButton = gtk_tool_button_new_from_stock(GTK_STOCK_NEW);
+#endif
   gtk_tool_item_set_tooltip_text(newButton,
 				 "Open another one of these windows");
   g_signal_connect(G_OBJECT(newButton),
@@ -1027,8 +1092,12 @@ do_appwindow (void)
 		     newButton,
 		     -1); /*-1 means append to end of toolbar*/
   
-			    
+ #if GTK_CHECK_VERSION(3, 10, 0)
+  GtkWidget *lockButtonIcon = gtk_image_new_from_icon_name("document-open", GTK_ICON_SIZE_SMALL_TOOLBAR);
+  GtkToolItem *lockButton = gtk_tool_button_new(lockButtonIcon, "_Open");
+#else
   GtkToolItem *lockButton = gtk_tool_button_new_from_stock(GTK_STOCK_OPEN);
+#endif
   gtk_tool_item_set_tooltip_text(lockButton,
 				 "This is a demo button that locks up the demo");
   g_signal_connect(G_OBJECT(lockButton),
@@ -1039,8 +1108,12 @@ do_appwindow (void)
 		     lockButton,
 		     -1); /*-1 means append to end of toolbar*/
   
-
+#if GTK_CHECK_VERSION(3, 10, 0)
+  GtkWidget *decoBUttonIcon = gtk_image_new_from_icon_name("document-open", GTK_ICON_SIZE_SMALL_TOOLBAR);
+  GtkToolItem *decoButton = gtk_tool_button_new(decoBUttonIcon, "_Open");
+#else
   GtkToolItem *decoButton = gtk_tool_button_new_from_stock(GTK_STOCK_OPEN);
+#endif
   gtk_tool_item_set_tooltip_text(decoButton,
 				 "This is a demo button that toggles window decorations");
   g_signal_connect(G_OBJECT(decoButton),
@@ -1050,8 +1123,12 @@ do_appwindow (void)
   gtk_toolbar_insert(GTK_TOOLBAR(toolbar),
 		     decoButton,
 		     -1); /*-1 means append to end of toolbar*/
-
+#if GTK_CHECK_VERSION(3, 10, 0)
+  GtkWidget *lockRatioButtonIcon = gtk_image_new_from_icon_name("document-open", GTK_ICON_SIZE_SMALL_TOOLBAR);
+  GtkToolItem *lockRatioButton = gtk_tool_button_new(lockRatioButtonIcon, "_Open");
+#else
   GtkToolItem *lockRatioButton = gtk_tool_button_new_from_stock(GTK_STOCK_OPEN);
+#endif
   gtk_tool_item_set_tooltip_text(lockRatioButton,
 				 "This is a demo button that locks the aspect ratio using a hint");
   g_signal_connect(G_OBJECT(lockRatioButton),
@@ -1062,7 +1139,12 @@ do_appwindow (void)
 		     lockRatioButton,
 		     -1); /*-1 means append to end of toolbar*/
 
+#if GTK_CHECK_VERSION(3, 10, 0)
+  GtkWidget *quitButtonIcon = gtk_image_new_from_icon_name("application-exit", GTK_ICON_SIZE_SMALL_TOOLBAR);
+  GtkToolItem *quitButton = gtk_tool_button_new(quitButtonIcon, "_Quit");
+#else
   GtkToolItem *quitButton = gtk_tool_button_new_from_stock(GTK_STOCK_QUIT);
+#endif
   gtk_tool_item_set_tooltip_text(quitButton,
 				 "This is a demo button with a 'quit' icon");
   g_signal_connect(G_OBJECT(quitButton),

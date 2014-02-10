@@ -121,14 +121,18 @@ evil_timeout (gpointer data)
       w = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
       #if GTK_CHECK_VERSION(3, 0, 0)
-      		#define gtk_widget_set_uposition gtk_window_move
-      #endif
-
+      gtk_window_move (GTK_WINDOW(w),
+                                g_random_int_range (0,
+                                                    gdk_screen_width ()),
+                                g_random_int_range (0,
+                                                    gdk_screen_height ()));
+      #else
       gtk_widget_set_uposition (w,
                                 g_random_int_range (0,
                                                     gdk_screen_width ()),
                                 g_random_int_range (0,
                                                     gdk_screen_height ()));
+      #endif
 
       parent = NULL;
       
@@ -194,10 +198,15 @@ set_up_icon_windows (void)
 {
   int i;
   int n_windows;
+#if GTK_CHECK_VERSION(3, 10, 0)
+  #define PREFERRED_ICON_SIZE 64
+  GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+  GError *error = NULL;
+#endif
 
   /* Create some windows */
   n_windows = 9;
-  
+
   i = 0;
   while (i < n_windows)
     {
@@ -212,28 +221,80 @@ set_up_icon_windows (void)
 
       icons = NULL;
 
+#if GTK_CHECK_VERSION(3, 10, 0)
+      pix = gtk_icon_theme_load_icon( icon_theme,
+                                      "document-save",
+                                      PREFERRED_ICON_SIZE,
+                                      GTK_ICON_LOOKUP_USE_BUILTIN,
+                                      &error);
+      if (error) {
+        g_critical("%s", error->message);
+        g_error_free(error);
+        error = NULL;
+      }
+#elif GTK_CHECK_VERSION(3, 0, 0)
+      pix = gtk_widget_render_icon_pixbuf (w,
+                                    GTK_STOCK_SAVE,
+                                    GTK_ICON_SIZE_LARGE_TOOLBAR);
+#else
       pix = gtk_widget_render_icon (w,
                                     GTK_STOCK_SAVE,
                                     GTK_ICON_SIZE_LARGE_TOOLBAR,
                                     NULL);
+#endif
       
       icons = g_list_append (icons, pix);
 
       if (i % 2)
         {
+#if GTK_CHECK_VERSION(3, 10, 0)
+          pix = gtk_icon_theme_load_icon( icon_theme,
+                                          "document-save",
+                                          PREFERRED_ICON_SIZE,
+                                          GTK_ICON_LOOKUP_USE_BUILTIN,
+                                          &error);
+          if (error) {
+            g_critical("%s", error->message);
+            g_error_free(error);
+            error = NULL;
+          }
+#elif GTK_CHECK_VERSION(3, 0, 0)
+          pix = gtk_widget_render_icon_pixbuf (w,
+                                        GTK_STOCK_SAVE,
+                                        GTK_ICON_SIZE_LARGE_TOOLBAR);
+#else
           pix = gtk_widget_render_icon (w,
                                         GTK_STOCK_SAVE,
                                         GTK_ICON_SIZE_DIALOG,
                                         NULL);
+#endif
           icons = g_list_append (icons, pix);
         }
 
       if (i % 3)
         {
-          pix = gtk_widget_render_icon (w,
+
+ #if GTK_CHECK_VERSION(3, 10, 0)
+         pix = gtk_icon_theme_load_icon( icon_theme,
+                                         "document-save",
+                                         PREFERRED_ICON_SIZE,
+                                         GTK_ICON_LOOKUP_USE_BUILTIN,
+                                         &error);
+         if (error) {
+           g_critical("%s", error->message);
+           g_error_free(error);
+           error = NULL;
+         }
+#elif GTK_CHECK_VERSION(3, 0, 0)
+         pix = gtk_widget_render_icon_pixbuf (w,
+                                       GTK_STOCK_SAVE,
+                                       GTK_ICON_SIZE_LARGE_TOOLBAR);
+#else
+         pix = gtk_widget_render_icon (w,
                                         GTK_STOCK_SAVE,
                                         GTK_ICON_SIZE_MENU,
                                         NULL);
+#endif
           icons = g_list_append (icons, pix);
         }
 
