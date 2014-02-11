@@ -431,7 +431,9 @@ main (int argc, char **argv)
   if (setlocale (LC_ALL, "") == NULL)
     meta_warning ("Locale not understood by C library, internationalization will not work\n");
 
+#if !GLIB_CHECK_VERSION(2, 34, 0)
   g_type_init ();
+#endif
   
   sigemptyset (&empty_mask);
   act.sa_handler = SIG_IGN;

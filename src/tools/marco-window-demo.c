@@ -339,7 +339,7 @@ utility_cb (gpointer             callback_data,
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
 
-#if GTK_CHECK_VERSION( 3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
   vbox = gtk_vbox_new (FALSE, 0);
@@ -377,7 +377,7 @@ toolbar_cb (gpointer             callback_data,
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
 
-#if GTK_CHECK_VERSION( 3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
   vbox = gtk_vbox_new (FALSE, 0);
@@ -406,7 +406,7 @@ menu_cb (gpointer             callback_data,
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
 
-#if GTK_CHECK_VERSION( 3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
   vbox = gtk_vbox_new (FALSE, 0);
@@ -432,7 +432,7 @@ override_redirect_cb (gpointer             callback_data,
   window = gtk_window_new (GTK_WINDOW_POPUP);
   gtk_window_set_title (GTK_WINDOW (window), "Override Redirect");
 
-#if GTK_CHECK_VERSION( 3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
   vbox = gtk_vbox_new (FALSE, 0);
@@ -461,7 +461,7 @@ border_only_cb (gpointer             callback_data,
   
   gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (callback_data));
 
-#if GTK_CHECK_VERSION( 3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
   vbox = gtk_vbox_new (FALSE, 0);
@@ -557,7 +557,7 @@ splashscreen_cb (gpointer             callback_data,
   set_gtk_window_type (GTK_WINDOW (window), "_NET_WM_WINDOW_TYPE_SPLASHSCREEN");
   gtk_window_set_title (GTK_WINDOW (window), "Splashscreen");
 
-#if GTK_CHECK_VERSION(3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
   vbox = gtk_vbox_new (FALSE, 0);
@@ -601,7 +601,7 @@ make_dock (int type)
     {
     case DOCK_LEFT:
     case DOCK_RIGHT:
-#if GTK_CHECK_VERSION( 3, 2, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
       box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 #else
       box = gtk_vbox_new (FALSE, 0);

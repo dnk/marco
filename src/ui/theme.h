@@ -890,12 +890,12 @@ MetaColorSpec* meta_color_spec_new_gtk         (MetaGtkColorComponent component,
 void           meta_color_spec_free            (MetaColorSpec     *spec);
 void           meta_color_spec_render          (MetaColorSpec     *spec,
                                                 GtkWidget         *widget,
-						#if GTK_CHECK_VERSION(3, 0, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
                                                 GdkRGBA           *color
-						#else
+#else
                                                 GdkColor          *color
-                                                #endif
-                                                );
+#endif
+                                               );
 
 
 MetaDrawOp*    meta_draw_op_new  (MetaDrawType        type);
@@ -913,7 +913,11 @@ void           meta_draw_op_draw (const MetaDrawOp    *op,
                                   MetaRectangle        logical_region);
 
 void           meta_draw_op_draw_with_style (const MetaDrawOp    *op,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                             GtkStyleContext     *style_gtk,
+#else
                                              GtkStyle            *style_gtk,
+#endif
                                              GtkWidget           *widget,
                                              #if GTK_CHECK_VERSION(3, 0, 0)
                                              cairo_t             *cr,
@@ -939,7 +943,11 @@ void            meta_draw_op_list_draw  (const MetaDrawOpList *op_list,
                                          const MetaDrawInfo   *info,
                                          MetaRectangle         rect);
 void            meta_draw_op_list_draw_with_style  (const MetaDrawOpList *op_list,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                                    GtkStyleContext      *style_gtk,
+#else
                                                     GtkStyle             *style_gtk,
+#endif
                                                     GtkWidget            *widget,
                                                     #if GTK_CHECK_VERSION(3, 0, 0)
                                                     cairo_t              *cr,
@@ -995,7 +1003,11 @@ void meta_frame_style_draw (MetaFrameStyle          *style,
 
 
 void meta_frame_style_draw_with_style (MetaFrameStyle          *style,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                       GtkStyleContext         *style_gtk,
+#else
                                        GtkStyle                *style_gtk,
+#endif
                                        GtkWidget               *widget,
                                        #if GTK_CHECK_VERSION(3, 0, 0)
                                        cairo_t                 *cr,
@@ -1090,7 +1102,11 @@ void meta_theme_draw_frame_by_name (MetaTheme              *theme,
                                     GdkPixbuf              *icon);
 
 void meta_theme_draw_frame_with_style (MetaTheme              *theme,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                       GtkStyleContext        *style_gtk,
+#else
                                        GtkStyle               *style_gtk,
+#endif
                                        GtkWidget              *widget,
                                        #if GTK_CHECK_VERSION(3, 0, 0)
                                        cairo_t                *cr,

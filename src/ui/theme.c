@@ -1369,11 +1369,11 @@ meta_color_spec_new_gtk (MetaGtkColorComponent component,
 void
 meta_color_spec_render (MetaColorSpec *spec,
                         GtkWidget     *widget,
-			#if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
                         GdkRGBA       *color
-                        #else
+#else
                         GdkColor      *color
-                        #endif
+#endif
                        )
 {
 #if GTK_CHECK_VERSION(3, 0, 0)
@@ -3358,8 +3358,13 @@ draw_op_as_pixbuf (const MetaDrawOp    *op,
       {
 	if (op->data.image.colorize_spec)
 	  {
+#if GTK_CHECK_VERSION(3, 0, 0)
+	    GdkRGBA color;
+#else
 	    GdkColor color;
+#endif
 
+#if !GTK_CHECK_VERSION(3, 0, 0)
             meta_color_spec_render (op->data.image.colorize_spec,
                                     widget, &color);
 
@@ -3377,6 +3382,7 @@ draw_op_as_pixbuf (const MetaDrawOp    *op,
                   GDK_COLOR_RGB (color);
               }
 
+#endif
             if (op->data.image.colorize_cache_pixbuf)
               {
                 pixbuf = scale_and_alpha_pixbuf (op->data.image.colorize_cache_pixbuf,
@@ -3523,12 +3529,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
                             MetaRectangle        rect,
                             MetaPositionExprEnv *env)
 {
-
-  #if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
   GdkRGBA color;
-  #else
+#else
   GdkColor color;
-  #endif
+#endif
 
   #if GTK_CHECK_VERSION(3, 0, 0)
   cairo_save(cr);
@@ -3555,11 +3560,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
         int x1, x2, y1, y2;
 
         meta_color_spec_render (op->data.line.color_spec, widget, &color);
-        #if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
         gdk_cairo_set_source_rgba (cr, &color);
-        #else
+#else
         gdk_cairo_set_source_color (cr, &color);
-        #endif
+#endif
 
         if (op->data.line.width > 0)
           cairo_set_line_width (cr, op->data.line.width);
@@ -3647,11 +3652,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
         int rx, ry, rwidth, rheight;
 
         meta_color_spec_render (op->data.rectangle.color_spec, widget, &color);
-        #if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
         gdk_cairo_set_source_rgba (cr, &color);
-        #else
+#else
         gdk_cairo_set_source_color (cr, &color);
-        #endif
+#endif
 
         rx = parse_x_position_unchecked (op->data.rectangle.x, env);
         ry = parse_y_position_unchecked (op->data.rectangle.y, env);
@@ -3681,11 +3686,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
         double center_x, center_y;
 
         meta_color_spec_render (op->data.arc.color_spec, widget, &color);
-        #if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
         gdk_cairo_set_source_rgba (cr, &color);
-        #else
+#else
         gdk_cairo_set_source_color (cr, &color);
-        #endif
+#endif
 
         rx = parse_x_position_unchecked (op->data.arc.x, env);
         ry = parse_y_position_unchecked (op->data.arc.y, env);
@@ -3740,11 +3745,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
         if (!needs_alpha)
           {
             meta_color_spec_render (op->data.tint.color_spec, widget, &color);
-            #if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
             gdk_cairo_set_source_rgba (cr, &color);
-            #else
+#else
             gdk_cairo_set_source_color (cr, &color);
-            #endif
+#endif
 
             cairo_rectangle (cr, rx, ry, rwidth, rheight);
             cairo_fill (cr);
@@ -3952,11 +3957,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
           int rx, ry;
 
           meta_color_spec_render (op->data.title.color_spec, widget, &color);
-          #if GTK_CHECK_VERSION(3, 4, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
           gdk_cairo_set_source_rgba (cr, &color);
-          #else
+#else
           gdk_cairo_set_source_color (cr, &color);
-          #endif
+#endif
 
           rx = parse_x_position_unchecked (op->data.title.x, env);
           ry = parse_y_position_unchecked (op->data.title.y, env);
@@ -4079,7 +4084,11 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
 
 void
 meta_draw_op_draw_with_style (const MetaDrawOp    *op,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                              GtkStyleContext     *style_gtk,
+#else
                               GtkStyle            *style_gtk,
+#endif
                               GtkWidget           *widget,
                               #if GTK_CHECK_VERSION(3, 0, 0)
                               cairo_t             *cr,
@@ -4185,7 +4194,11 @@ meta_draw_op_list_unref (MetaDrawOpList *op_list)
 
 void
 meta_draw_op_list_draw_with_style  (const MetaDrawOpList *op_list,
+#if GTK_CHECK_VERSION(3, 0, 0)
+                                    GtkStyleContext      *style_gtk,
+#else
                                     GtkStyle             *style_gtk,
+#endif
                                     GtkWidget            *widget,
                                     #if GTK_CHECK_VERSION(3, 0, 0)
                                     cairo_t              *cr,
@@ -6069,9 +6082,10 @@ meta_gtk_widget_get_font_desc (GtkWidget *widget,
 
 #if GTK_CHECK_VERSION(3, 0, 0)
   GtkStyleContext *style_context = gtk_widget_get_style_context (widget);
-  const PangoFontDescription * fond_desc;
-  gtk_style_context_get(style_context, GTK_STATE_FLAG_NORMAL, GTK_STYLE_PROPERTY_FONT, &fond_desc, NULL);
-  font_desc = pango_font_description_copy (fond_desc);
+  gtk_style_context_get(style_context, GTK_STATE_FLAG_NORMAL,
+    GTK_STYLE_PROPERTY_FONT, &font_desc,
+    NULL);
+  font_desc = pango_font_description_copy(font_desc);
 #else
   font_desc = pango_font_description_copy (gtk_widget_get_style (widget)->font_desc);
 #endif
