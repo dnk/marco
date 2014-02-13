@@ -159,7 +159,6 @@ meta_gradient_create_multi (int              width,
                             int              n_colors,
                             MetaGradientType style)
 {
-
   if (n_colors > 2)
     {
       switch (style)
@@ -306,7 +305,9 @@ meta_gradient_create_horizontal (int width, int height,
                                 )
 {    
   int i;
+#if !GTK_CHECK_VERSION(3, 0, 0)
   long r, g, b, dr, dg, db;
+#endif
   GdkPixbuf *pixbuf;
   unsigned char *ptr;
   unsigned char *pixels;
@@ -658,8 +659,11 @@ meta_gradient_create_multi_vertical (int width, int height,
 #endif
                                      int count)
 {
-  int i, j, k;
+  int i;
+#if !GTK_CHECK_VERSION(3, 0, 0)
+  int j, k;
   long r, g, b, dr, dg, db;
+#endif
   GdkPixbuf *pixbuf;
   unsigned char *ptr, *tmp, *pixels;
   int height2;

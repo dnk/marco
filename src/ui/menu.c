@@ -107,7 +107,11 @@ static void popup_position_func(GtkMenu* menu, gint* x, gint* y, gboolean* push_
 
 	pos = user_data;
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+	gtk_widget_get_preferred_size(GTK_WIDGET(menu), NULL, &req);
+#else
 	gtk_widget_size_request(GTK_WIDGET(menu), &req);
+#endif
 
 	*x = pos->x;
 	*y = pos->y;
