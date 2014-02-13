@@ -48,6 +48,7 @@
 #include "compositor.h"
 #include <X11/Xatom.h>
 #include <X11/cursorfont.h>
+#include <gdk/gdkx.h>
 
 #ifdef HAVE_SOLARIS_XINERAMA
 	#include <X11/extensions/xinerama.h>

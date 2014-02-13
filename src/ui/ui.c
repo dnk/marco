@@ -314,7 +314,7 @@ meta_ui_new (Display *xdisplay,
   g_assert (xdisplay == GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
   ui->frames = meta_frames_new (XScreenNumberOfScreen (screen));
   gtk_widget_realize (GTK_WIDGET (ui->frames));
-
+  gtk_widget_show(GTK_WIDGET (ui->frames));
   g_object_set_data (G_OBJECT (gdisplay), "meta-ui", ui);
 
   return ui;
@@ -1171,7 +1171,7 @@ meta_ui_window_is_widget (MetaUI *ui,
 
 #if GTK_CHECK_VERSION (3, 0, 0)
   GdkDisplay *display;
-  
+  display = gdk_x11_lookup_xdisplay (ui->xdisplay);
   window = gdk_x11_window_lookup_for_display (display, xwindow);
 #else
   window = gdk_xid_table_lookup (xwindow);

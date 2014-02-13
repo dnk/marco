@@ -41,18 +41,11 @@
 
 #if GTK_CHECK_VERSION(3, 0, 0)
     #include <cairo-xlib.h>
-    #define GtkObject GtkWidget
-    #define GTK_OBJECT_CLASS GTK_WIDGET_CLASS
     #define GdkRegion cairo_region_t
-    #define GdkRegion cairo_region_t
-    #define gdk_region_new cairo_region_create
-    #define gdk_region_subtract cairo_region_subtract
     #define gdk_region_destroy cairo_region_destroy
-    #define gdk_region_union_with_rect cairo_region_union_rectangle
     #define gdk_region_rectangle cairo_region_create_rectangle
     #define gdk_region_offset cairo_region_translate
     #define gdk_region_intersect cairo_region_intersect
-    #define gdk_region_copy cairo_region_copy
     G_DEFINE_TYPE (MetaFrames, meta_frames, GTK_TYPE_WINDOW);
     #define parent_class meta_frames_parent_class
     #define GTK_WIDGET_REALIZED gtk_widget_get_realized
@@ -62,7 +55,11 @@
 
 static void meta_frames_class_init (MetaFramesClass *klass);
 static void meta_frames_init       (MetaFrames      *frames);
+#if GTK_CHECK_VERSION(3, 0, 0)
+static void meta_frames_destroy    (GtkWidget       *object);
+#else
 static void meta_frames_destroy    (GtkObject       *object);
+#endif
 static void meta_frames_finalize   (GObject         *object);
 static void meta_frames_style_set  (GtkWidget       *widget,
                                     GtkStyle        *prev_style);
@@ -198,15 +195,16 @@ meta_frames_class_init (MetaFramesClass *class)
   #if !GTK_CHECK_VERSION(3, 0, 0)
   object_class = (GtkObjectClass*) class;
   #endif
-  widget_class = (GtkWidgetClass*) class;
+  widget_class = GTK_WIDGET_CLASS (class);
 
   parent_class = g_type_class_peek_parent (class);
 
   gobject_class->finalize = meta_frames_finalize;
   #if !GTK_CHECK_VERSION(3, 0, 0)
   object_class->destroy = meta_frames_destroy;
+  #else
+  widget_class->destroy = meta_frames_destroy;
   #endif
-
   widget_class->style_set = meta_frames_style_set;
 
   widget_class->realize = meta_frames_realize;
@@ -295,8 +293,13 @@ listify_func (gpointer key, gpointer value, gpointer data)
   *listp = g_slist_prepend (*listp, value);
 }
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+static void
+meta_frames_destroy (GtkWidget *object)
+#else
 static void
 meta_frames_destroy (GtkObject *object)
+#endif
 {
   GSList *winlist;
   GSList *tmp;
@@ -320,7 +323,11 @@ meta_frames_destroy (GtkObject *object)
     }
   g_slist_free (winlist);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+  GTK_WIDGET_CLASS (parent_class)->destroy (object);
+#else
   GTK_OBJECT_CLASS (parent_class)->destroy (object);
+#endif
 }
 
 static void
@@ -662,13 +669,18 @@ static void
 meta_frames_attach_style (MetaFrames  *frames,
                           MetaUIFrame *frame)
 {
-  if (frame->style != NULL)
+  if (frame->style != NULL) {
+#if GTK_CHECK_VERSION(3, 0, 0)
+    g_object_unref(frame->style);
+#else
     gtk_style_detach (frame->style);
+#endif
+  }
 
   /* Weirdly, gtk_style_attach() steals a reference count from the style passed in */
   #if GTK_CHECK_VERSION(3, 0, 0)
-  g_object_ref (gtk_widget_get_style (GTK_WIDGET (frames)));
-  frame->style = gtk_style_attach (gtk_widget_get_style (GTK_WIDGET (frames)), frame->window);
+  frame->style = gtk_widget_get_style_context (GTK_WIDGET (frames));
+  g_object_ref(frame->style);
   #else
   g_object_ref (GTK_WIDGET (frames)->style);
   frame->style = gtk_style_attach (GTK_WIDGET (frames)->style, frame->window);
@@ -743,7 +755,11 @@ meta_frames_unmanage_window (MetaFrames *frames,
 
       g_hash_table_remove (frames->frames, &frame->xwindow);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+      g_object_unref (frame->style);
+#else
       gtk_style_detach (frame->style);
+#endif
 
       gdk_window_destroy (frame->window);
 
@@ -2489,6 +2505,8 @@ subtract_client_area (cairo_region_t *region, MetaUIFrame *frame)
   MetaFrameType type;
   cairo_region_t *tmp_region;
   Display *display;
+
+  int unused0, unused1;
   
   display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
 
@@ -2499,8 +2517,8 @@ subtract_client_area (cairo_region_t *region, MetaUIFrame *frame)
                  META_CORE_GET_CLIENT_HEIGHT, &area.height,
                  META_CORE_GET_END);
   meta_theme_get_frame_borders (meta_theme_get_current (),
-                         type, frame->text_height, flags, 
-                         &area.x, NULL, &area.y, NULL);
+                         type, frame->text_height, flags,
+                         &area.x, &unused0, &area.y, &unused1);
 
   tmp_region = cairo_region_create_rectangle (&area);
   cairo_region_subtract (region, tmp_region);
@@ -2907,16 +2925,20 @@ meta_frames_set_window_background (MetaFrames   *frames,
 #else
       GdkColor color;
 #endif
+
+#if !GTK_CHECK_VERSION(3, 0, 0)
+/*fixme*/
       GdkVisual *visual;
+#endif
 
       meta_color_spec_render (style->window_background_color,
                               GTK_WIDGET (frames),
                               &color);
 
       /* Set A in ARGB to window_background_alpha, if we have ARGB */
+#if !GTK_CHECK_VERSION(3, 0, 0)
 
       visual = gtk_widget_get_visual (GTK_WIDGET (frames));
-#if !GTK_CHECK_VERSION(3, 0, 0)
       #if GTK_CHECK_VERSION(3, 0, 0)
       if (gdk_visual_get_depth(visual) == 32) /* we have ARGB */
       #else
@@ -2936,8 +2958,12 @@ meta_frames_set_window_background (MetaFrames   *frames,
     }
   else
     {
+#if GTK_CHECK_VERSION(3, 0, 0)
+      gtk_style_context_set_background(frame->style, frame->window);
+#else
       gtk_style_set_background (frame->style,
                                 frame->window, GTK_STATE_NORMAL);
+#endif
     }
  }
 

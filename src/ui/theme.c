@@ -4079,7 +4079,9 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
       break;
     }
 
+#if !GTK_CHECK_VERSION(3, 0, 0)
   cairo_destroy (cr);
+#endif
 }
 
 void
@@ -5615,6 +5617,9 @@ meta_theme_draw_frame_with_style (MetaTheme              *theme,
   MetaFrameStyle *style;
 
   g_return_if_fail (type < META_FRAME_TYPE_LAST);
+#if GTK_CHECK_VERSION(3, 0, 0)
+  g_return_if_fail (GTK_IS_STYLE_CONTEXT(style_gtk));
+#endif
 
   style = theme_get_style (theme, type, flags);
 
