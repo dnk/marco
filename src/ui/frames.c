@@ -46,7 +46,7 @@
     #define gdk_region_rectangle cairo_region_create_rectangle
     #define gdk_region_offset cairo_region_translate
     #define gdk_region_intersect cairo_region_intersect
-    G_DEFINE_TYPE (MetaFrames, meta_frames, GTK_TYPE_WINDOW);
+    G_DEFINE_TYPE (MetaFrames, meta_frames, GTK_TYPE_INVISIBLE);
     #define parent_class meta_frames_parent_class
     #define GTK_WIDGET_REALIZED gtk_widget_get_realized
 #endif
@@ -131,27 +131,7 @@ static void invalidate_all_caches (MetaFrames *frames);
 static void invalidate_whole_window (MetaFrames *frames,
                                      MetaUIFrame *frame);
 
-#if GTK_CHECK_VERSION(3, 0, 0)
-
-static GObject *
-meta_frames_constructor (GType                  gtype,
-                         guint                  n_properties,
-                         GObjectConstructParam *properties)
-{
-  GObject *object;
-  GObjectClass *gobject_class;
-
-  gobject_class = G_OBJECT_CLASS (meta_frames_parent_class);
-  object = gobject_class->constructor (gtype, n_properties, properties);
-
-  g_object_set (object,
-                "type", GTK_WINDOW_POPUP,
-                NULL);
-
-  return object;
-}
-
-#else
+#if !GTK_CHECK_VERSION(3, 0, 0)
 
 static GtkWidgetClass *parent_class = NULL;
 
@@ -197,7 +177,9 @@ meta_frames_class_init (MetaFramesClass *class)
   #endif
   widget_class = GTK_WIDGET_CLASS (class);
 
+#if !GTK_CHECK_VERSION (3, 0, 0)
   parent_class = g_type_class_peek_parent (class);
+#endif
 
   gobject_class->finalize = meta_frames_finalize;
   #if !GTK_CHECK_VERSION(3, 0, 0)
