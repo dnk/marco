@@ -257,6 +257,7 @@ meta_window_new_with_attrs (MetaDisplay       *display,
   Atom initial_props[N_INITIAL_PROPS];
   int i;
   gboolean has_shape;
+  Region input_shape_region;
 
   g_assert (attrs != NULL);
   g_assert (N_INITIAL_PROPS == (int) G_N_ELEMENTS (initial_props));
@@ -328,6 +329,7 @@ meta_window_new_with_attrs (MetaDisplay       *display,
   XSelectInput (display->xdisplay, xwindow, event_mask);
 
   has_shape = FALSE;
+  input_shape_region = XCreateRegion();
 #ifdef HAVE_SHAPE
   if (META_DISPLAY_HAS_SHAPE (display))
     {
@@ -349,6 +351,32 @@ meta_window_new_with_attrs (MetaDisplay       *display,
                   "Window has_shape = %d extents %d,%d %u x %u\n",
                   has_shape, x_bounding, y_bounding,
                   w_bounding, h_bounding);
+    }
+  if (META_DISPLAY_HAS_INPUT_SHAPE (display))
+    {
+       int n_rect = 0;
+       int ordering = 0;
+
+       XShapeSelectInput (display->xdisplay, xwindow, ShapeNotifyMask);
+       XRectangle *rect = XShapeGetRectangles (display->xdisplay,  xwindow,
+                            ShapeInput, &n_rect, &ordering);
+
+       if (rect)
+         XUnionRectWithRegion(rect, input_shape_region, input_shape_region);
+
+       meta_topic (META_DEBUG_SHAPES,
+                   "Window has input shape: n_rect = %d\n",
+                   n_rect);
+       int i=0;
+       for(i=0; i<n_rect; i++) {
+		XRectangle *r = rect + i;
+		meta_topic (META_DEBUG_SHAPES,
+			"%d rect (%hd,%hd x %hd,%hd)\n",
+			i, r->x, r->y, r->width, r->height);
+      }
+
+       if (rect)
+         XFree(rect);
     }
 #endif
 
@@ -424,6 +452,7 @@ meta_window_new_with_attrs (MetaDisplay       *display,
   meta_stack_freeze (window->screen->stack);
 
   window->has_shape = has_shape;
+  window->input_shape_region = input_shape_region;
 
   window->rect.x = attrs->x;
   window->rect.y = attrs->y;
@@ -1189,6 +1218,8 @@ meta_window_free (MetaWindow  *window,
 #ifdef HAVE_SHAPE
   if (META_DISPLAY_HAS_SHAPE (window->display))
     XShapeSelectInput (window->display->xdisplay, window->xwindow, NoEventMask);
+
+  XDestroyRegion (window->input_shape_region);
 #endif
 
   meta_error_trap_pop (window->display, FALSE);

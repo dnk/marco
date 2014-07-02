@@ -107,7 +107,8 @@ void meta_ui_apply_frame_shape  (MetaUI  *ui,
                                  Window   xwindow,
                                  int      new_window_width,
                                  int      new_window_height,
-                                 gboolean window_has_shape);
+                                 gboolean window_has_shape,
+                                 Region   input_shape_region);
 
 void meta_ui_queue_frame_draw (MetaUI *ui,
                                Window xwindow);

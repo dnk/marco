@@ -37,6 +37,7 @@ MetaCompositor *meta_display_get_compositor (MetaDisplay *display);
 GSList *meta_display_get_screens (MetaDisplay *display);
 
 gboolean meta_display_has_shape (MetaDisplay *display);
+gboolean meta_display_has_input_shape (MetaDisplay *display);
 
 MetaScreen *meta_display_screen_for_root (MetaDisplay *display,
                                           Window       xroot);

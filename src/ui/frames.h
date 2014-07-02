@@ -154,7 +154,8 @@ void meta_frames_apply_shapes (MetaFrames *frames,
                                Window      xwindow,
                                int         new_window_width,
                                int         new_window_height,
-                               gboolean    window_has_shape);
+                               gboolean    window_has_shape,
+                               Region      input_shape_region);
 void meta_frames_move_resize_frame (MetaFrames *frames,
 				    Window      xwindow,
 				    int         x,

@@ -522,11 +522,12 @@ meta_ui_apply_frame_shape  (MetaUI  *ui,
                             Window   xwindow,
                             int      new_window_width,
                             int      new_window_height,
-                            gboolean window_has_shape)
+                            gboolean window_has_shape,
+                            Region   input_shape_region)
 {
   meta_frames_apply_shapes (ui->frames, xwindow,
                             new_window_width, new_window_height,
-                            window_has_shape);
+                            window_has_shape, input_shape_region);
 }
 
 void

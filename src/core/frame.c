@@ -165,7 +165,8 @@ meta_window_ensure_frame (MetaWindow *window)
                              frame->xwindow,
                              frame->rect.width,
                              frame->rect.height,
-                             frame->window->has_shape);
+                             frame->window->has_shape,
+                             frame->window->input_shape_region);
   frame->need_reapply_frame_shape = FALSE;
 
   meta_display_ungrab (window->display);
@@ -322,7 +323,8 @@ update_shape (MetaFrame *frame)
                                  frame->xwindow,
                                  frame->rect.width,
                                  frame->rect.height,
-                                 frame->window->has_shape);
+                                 frame->window->has_shape,
+                                 frame->window->input_shape_region);
       frame->need_reapply_frame_shape = FALSE;
     }
 }

@@ -257,6 +257,8 @@ struct _MetaDisplay {
 	#ifdef HAVE_SHAPE
 		int shape_event_base;
 		int shape_error_base;
+		int shape_major_version;
+		int shape_minor_version;
 	#endif
 
 	#ifdef HAVE_RENDER
@@ -284,9 +286,12 @@ struct _MetaDisplay {
 
 	#ifdef HAVE_SHAPE
 		unsigned int have_shape : 1;
+		unsigned int have_input_shape : 1;
 		#define META_DISPLAY_HAS_SHAPE(display) ((display)->have_shape)
+		#define META_DISPLAY_HAS_INPUT_SHAPE(display) ((display)->have_input_shape)
 	#else
 		#define META_DISPLAY_HAS_SHAPE(display) FALSE
+		#define META_DISPLAY_HAS_INPUT_SHAPE(display) FALSE
 	#endif
 
 	#ifdef HAVE_RENDER

@@ -326,6 +326,12 @@ struct _MetaWindow
   /* Note: can be NULL */
   GSList *struts;
 
+#ifdef HAVE_SHAPE
+  /* input shape region*/
+  Region input_shape_region;
+#endif
+
+
 #ifdef HAVE_XSYNC
   /* XSync update counter */
   XSyncCounter sync_request_counter;

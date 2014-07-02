@@ -869,7 +869,8 @@ meta_frames_apply_shapes (MetaFrames *frames,
                           Window      xwindow,
                           int         new_window_width,
                           int         new_window_height,
-                          gboolean    window_has_shape)
+                          gboolean    window_has_shape,
+                          Region      input_shape_region)
 {
 #ifdef HAVE_SHAPE
   /* Apply shapes as if window had new_window_width, new_window_height */
@@ -878,6 +879,7 @@ meta_frames_apply_shapes (MetaFrames *frames,
   XRectangle xrect;
   Region corners_xregion;
   Region window_xregion;
+  Region window_input_region;
 
   frame = meta_frames_lookup_window (frames, xwindow);
   g_return_if_fail (frame != NULL);
@@ -985,6 +987,7 @@ meta_frames_apply_shapes (MetaFrames *frames,
     }
 
   window_xregion = XCreateRegion ();
+  window_input_region = XCreateRegion ();
 
   xrect.x = 0;
   xrect.y = 0;
@@ -1058,17 +1061,28 @@ meta_frames_apply_shapes (MetaFrames *frames,
       XUnionRectWithRegion (&xrect, client_xregion, client_xregion);
 
       XSubtractRegion (window_xregion, client_xregion, window_xregion);
+      XIntersectRegion (window_xregion, input_shape_region, window_input_region);
 
       XDestroyRegion (client_xregion);
 
       XShapeCombineRegion (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), shape_window,
                            ShapeBounding, 0, 0, window_xregion, ShapeUnion);
 
+      XShapeCombineRegion (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), shape_window,
+                           ShapeInput, 0, 0, window_input_region, ShapeUnion);
+
+
       /* Now copy shape_window shape to the real frame */
       XShapeCombineShape (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow, ShapeBounding,
                           0, 0,
                           shape_window,
                           ShapeBounding,
+                          ShapeSet);
+
+      XShapeCombineShape (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow, ShapeInput,
+                          0, 0,
+                          shape_window,
+                          ShapeInput,
                           ShapeSet);
 
       XDestroyWindow (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), shape_window);
@@ -1083,11 +1097,15 @@ meta_frames_apply_shapes (MetaFrames *frames,
 
       XShapeCombineRegion (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
                            ShapeBounding, 0, 0, window_xregion, ShapeSet);
+      XShapeCombineRegion (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
+                           ShapeInput, 0, 0, input_shape_region, ShapeSet);
+
     }
 
   frame->shape_applied = TRUE;
 
   XDestroyRegion (window_xregion);
+  XDestroyRegion (window_input_region);
 #endif /* HAVE_SHAPE */
 }
 

@@ -505,6 +505,7 @@ meta_display_open (void)
 #ifdef HAVE_SHAPE
   {
     the_display->have_shape = FALSE;
+    the_display->have_input_shape = FALSE;
 
     the_display->shape_error_base = 0;
     the_display->shape_event_base = 0;
@@ -517,7 +518,15 @@ meta_display_open (void)
         the_display->shape_event_base = 0;
       }
     else
-      the_display->have_shape = TRUE;
+      {
+        the_display->have_shape = TRUE;
+        XShapeQueryVersion(the_display->xdisplay,
+                           &the_display->shape_major_version,
+                           &the_display->shape_minor_version);
+
+        the_display->have_input_shape = the_display->shape_major_version > 1 ||
+                                       (the_display->shape_major_version == 1 && the_display->shape_minor_version >= 1);
+      }
 
     meta_verbose ("Attempted to init Shape, found error base %d event base %d\n",
                   the_display->shape_error_base,
@@ -1736,6 +1745,19 @@ static gboolean event_callback(XEvent* event, gpointer data)
                 {
                   window->frame->need_reapply_frame_shape = TRUE;
 		  meta_warning("from event callback\n");
+                  meta_window_queue (window, META_QUEUE_MOVE_RESIZE);
+                }
+            }
+          else if (sev->kind == ShapeInput)
+            {
+              meta_topic (META_DEBUG_SHAPES,
+                          "Window %s input shape changed\n",
+                          window->desc);
+
+              if (window->frame)
+                {
+                  window->frame->need_reapply_frame_shape = TRUE;
+                  meta_warning("from event callback\n");
                   meta_window_queue (window, META_QUEUE_MOVE_RESIZE);
                 }
             }
@@ -3169,7 +3191,8 @@ meta_spew_event (MetaDisplay *display,
                                sev->kind == ShapeBounding ?
                                "ShapeBounding" :
                                (sev->kind == ShapeClip ?
-                               "ShapeClip" : "(unknown)"),
+                               "ShapeClip" : (sev->kind == ShapeInput ?
+                               "ShapeInput" : "(unknown)")),
                                sev->x, sev->y, sev->width, sev->height,
                                sev->shaped);
           }
@@ -5394,6 +5417,12 @@ gboolean
 meta_display_has_shape (MetaDisplay *display)
 {
   return META_DISPLAY_HAS_SHAPE (display);
+}
+
+gboolean
+meta_display_has_input_shape (MetaDisplay *display)
+{
+  return META_DISPLAY_HAS_INPUT_SHAPE (display);
 }
 
 MetaWindow *
