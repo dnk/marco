@@ -168,8 +168,8 @@
     </key>
     <key name="center-new-windows" type="b">
       <default>true</default>
-      <summary>Determine if new windows are created on the center of the screen</summary>
-      <description>If set to true, new windows are open on the center of the screen, else they are open on the top left of the screen.</description>
+      <summary>Determines if new windows are created on the center of the screen</summary>
+      <description>If set to true, new windows are opened in the center of the screen. Otherwise, they are opened at the top left of the screen.</description>
     </key>
     <key name="side-by-side-tiling" type="b">
       <default>true</default>
@@ -513,7 +513,7 @@
       <description>The format looks like "&lt;Control&gt;a" or "&lt;Shift&gt;&lt;Alt&gt;F1". The parser is fairly liberal and allows lower or upper case, and also abbreviations such as "&lt;Ctl&gt;" and "&lt;Ctrl&gt;". If you set the option to the special string "disabled", then there will be no keybinding for this action.</description>
     </key>
     <key name="switch-group" type="s">
-      <default>'disabled'</default>
+      <default>'&lt;Alt&gt;grave'</default>
       <summary>Move between windows of an application, using a popup window</summary>
       <description>The format looks like "&lt;Control&gt;a" or "&lt;Shift&gt;&lt;Alt&gt;F1". The parser is fairly liberal and allows lower or upper case, and also abbreviations such as "&lt;Ctl&gt;" and "&lt;Ctrl&gt;". If you set the option to the special string "disabled", then there will be no keybinding for this action. This keybinding may be reversed by holding down the "shift" key; therefore, "shift" cannot be one of the keys it uses.</description>
     </key>
