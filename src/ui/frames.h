@@ -75,11 +75,7 @@ struct _MetaUIFrame
 {
   Window xwindow;
   GdkWindow *window;
-#if GTK_CHECK_VERSION(3, 0, 0)
   GtkStyleContext *style;
-#else
-  GtkStyle *style;
-#endif
   MetaFrameStyle *cache_style;
   PangoLayout *layout;
   int text_height;
@@ -93,7 +89,7 @@ struct _MetaUIFrame
 
 struct _MetaFrames
 {
-  GtkWindow parent_instance;
+  GtkInvisible parent_instance;
 
   GHashTable *text_heights;
 
@@ -111,7 +107,7 @@ struct _MetaFrames
 
 struct _MetaFramesClass
 {
-  GtkWindowClass parent_class;
+  GtkInvisibleClass parent_class;
 };
 
 GType        meta_frames_get_type               (void) G_GNUC_CONST;
