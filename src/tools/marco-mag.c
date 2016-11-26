@@ -146,11 +146,18 @@ grab_area_at_mouse (GtkWidget *invisible,
 static void
 shutdown_grab (void)
 {
+#if GTK_CHECK_VERSION (3, 20, 0)
+  GdkSeat *seat;
+
+  seat = gdk_display_get_default_seat (gdk_display_get_default());
+  gdk_seat_ungrab (seat);
+#else
   GdkDeviceManager *manager = gdk_display_get_device_manager (gdk_display_get_default ());
   GdkDevice *device = gdk_device_manager_get_client_pointer (manager);
 
   gdk_device_ungrab (device, gtk_get_current_event_time ());
   gdk_device_ungrab (gdk_device_get_associated_device (device), gtk_get_current_event_time ());
+#endif
   gtk_grab_remove (grab_widget);
 }
 
@@ -228,8 +235,12 @@ static void
 begin_area_grab (void)
 {
   GdkWindow *window;
+#if GTK_CHECK_VERSION (3, 20, 0)
+  GdkSeat *seat;
+#else
   GdkDeviceManager *manager;
   GdkDevice *device;
+#endif
 
   if (grab_widget == NULL)
     {
@@ -242,6 +253,22 @@ begin_area_grab (void)
     }
 
   window = gtk_widget_get_window (grab_widget);
+#if GTK_CHECK_VERSION (3, 20, 0)
+  seat = gdk_display_get_default_seat (gdk_display_get_default ());
+
+  if (gdk_seat_grab (seat,
+                     window,
+                     GDK_SEAT_CAPABILITY_ALL_POINTING | GDK_SEAT_CAPABILITY_KEYBOARD,
+                     FALSE,
+                     NULL,
+                     NULL,
+                     NULL,
+                     NULL) != GDK_GRAB_SUCCESS)
+    {
+      g_warning ("Failed to grab pointers and keyboard to do eyedropper");
+      return;
+    }
+#else
   manager = gdk_display_get_device_manager (gdk_display_get_default ());
   device = gdk_device_manager_get_client_pointer (manager);
 
@@ -269,6 +296,7 @@ begin_area_grab (void)
       g_warning ("Failed to grab keyboard to do eyedropper");
       return;
     }
+#endif
 
   gtk_grab_add (grab_widget);
 
