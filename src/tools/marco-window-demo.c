@@ -559,10 +559,6 @@ make_dock (int type)
   GtkWidget *image;
   GtkWidget *box;
   GtkWidget *button;
-#if GTK_CHECK_VERSION (3, 22, 0)
-  GdkMonitor *monitor;
-  GdkRectangle geometry;
-#endif
 
   g_return_if_fail (type != DOCK_ALL);
 
@@ -597,11 +593,6 @@ make_dock (int type)
 
   gtk_container_add (GTK_CONTAINER (window), box);
 
-#if GTK_CHECK_VERSION (3, 22, 0)
-  monitor = gdk_display_get_monitor_at_window (gtk_widget_get_display (window), gtk_widget_get_window (window));
-  gdk_monitor_get_geometry (monitor, &geometry);
-#endif
-
 #define DOCK_SIZE 48
   switch (type)
     {
@@ -613,11 +604,7 @@ make_dock (int type)
       break;
     case DOCK_RIGHT:
       gtk_widget_set_size_request (window, DOCK_SIZE, 400);
-#if GTK_CHECK_VERSION (3, 22, 0)
-      gtk_window_move (GTK_WINDOW (window), geometry.width - DOCK_SIZE, 200);
-#else
-      gtk_window_move (GTK_WINDOW (window), gdk_screen_width () - DOCK_SIZE, 200);
-#endif
+      gtk_window_move (GTK_WINDOW (window), WidthOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ())) - DOCK_SIZE, 200);
       set_gtk_window_struts (window, 0, DOCK_SIZE, 0, 0);
       gtk_window_set_title (GTK_WINDOW (window), "RightDock");
       break;
@@ -629,11 +616,7 @@ make_dock (int type)
       break;
     case DOCK_BOTTOM:
       gtk_widget_set_size_request (window, 600, DOCK_SIZE);
-#if GTK_CHECK_VERSION (3, 22, 0)
-      gtk_window_move (GTK_WINDOW (window), 200, geometry.height - DOCK_SIZE);
-#else
-      gtk_window_move (GTK_WINDOW (window), 200, gdk_screen_height () - DOCK_SIZE);
-#endif
+      gtk_window_move (GTK_WINDOW (window), 200, HeightOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ())) - DOCK_SIZE);
       set_gtk_window_struts (window, 0, 0, 0, DOCK_SIZE);
       gtk_window_set_title (GTK_WINDOW (window), "BottomDock");
       break;
@@ -680,7 +663,6 @@ dock_cb (GSimpleAction *action,
     }
 }
 
-#if GTK_CHECK_VERSION (3, 16, 0)
 static void
 override_background_color (GtkWidget *widget,
                            GdkRGBA   *rgba)
@@ -700,7 +682,6 @@ override_background_color (GtkWidget *widget,
                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   g_object_unref (provider);
 }
-#endif
 
 static void
 desktop_cb (GSimpleAction *action,
@@ -710,36 +691,21 @@ desktop_cb (GSimpleAction *action,
   GtkWidget *window;
   GtkWidget *label;
   GdkRGBA    desktop_color;
-#if GTK_CHECK_VERSION (3, 22, 0)
-  GdkMonitor *monitor;
-  GdkRectangle geometry;
-#endif
 
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   set_gtk_window_type (GTK_WINDOW (window), "_NET_WM_WINDOW_TYPE_DESKTOP");
   gtk_window_set_title (GTK_WINDOW (window), "Desktop");
-#if GTK_CHECK_VERSION (3, 22, 0)
-  monitor = gdk_display_get_monitor_at_window (gtk_widget_get_display(window), gtk_widget_get_window (window));
-  gdk_monitor_get_geometry (monitor, &geometry);
   gtk_widget_set_size_request (window,
-                               geometry.width, geometry.height);
-  gtk_window_move (GTK_WINDOW (window), geometry.x, geometry.y);
-#else
-  gtk_widget_set_size_request (window,
-                               gdk_screen_width (), gdk_screen_height ());
+                               WidthOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ())),
+                               HeightOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ())));
   gtk_window_move (GTK_WINDOW (window), 0, 0);
-#endif
 
   desktop_color.red = 0.32;
   desktop_color.green = 0.46;
   desktop_color.blue = 0.65;
   desktop_color.alpha = 1.0;
 
-#if GTK_CHECK_VERSION (3, 16, 0)
   override_background_color (window, &desktop_color);
-#else
-  gtk_widget_override_background_color (window, 0, &desktop_color);
-#endif
 
   label = focus_label (window);
 

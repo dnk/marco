@@ -34,6 +34,7 @@
 #include "../core/frame-private.h"
 #include "draw-workspace.h"
 #include <gtk/gtk.h>
+#include <gdk/gdkx.h>
 #include <math.h>
 
 #define OUTSIDE_SELECT_RECT 2
@@ -60,7 +61,7 @@ struct _MetaTabPopup
   GList *entries;
   TabEntry *current_selected_entry;
   GtkWidget *outline_window;
-  gboolean outline;
+  gint border;
 };
 
 static GtkWidget* selectable_image_new (GdkPixbuf *pixbuf);
@@ -81,8 +82,11 @@ outline_window_draw (GtkWidget *widget,
 
   popup = data;
 
-  if (!popup->outline || popup->current_selected_entry == NULL)
+  if (popup->border & BORDER_OUTLINE_WORKSPACE ||
+        popup->current_selected_entry == NULL)
+  {
     return FALSE;
+  }
 
   te = popup->current_selected_entry;
 
@@ -211,10 +215,9 @@ tab_entry_new (const MetaTabEntry *entry,
 
 MetaTabPopup*
 meta_ui_tab_popup_new (const MetaTabEntry *entries,
-                       int                 screen_number,
                        int                 entry_count,
                        int                 width,
-                       gboolean            outline)
+                       gint                border)
 {
   MetaTabPopup *popup;
   int i, left, right, top, bottom;
@@ -232,8 +235,7 @@ meta_ui_tab_popup_new (const MetaTabEntry *entries,
 
   popup->outline_window = gtk_window_new (GTK_WINDOW_POPUP);
 
-  screen = gdk_display_get_screen (gdk_display_get_default (),
-                                   screen_number);
+  screen = gdk_display_get_default_screen (gdk_display_get_default ());
   gtk_window_set_screen (GTK_WINDOW (popup->outline_window),
                          screen);
 
@@ -256,12 +258,13 @@ meta_ui_tab_popup_new (const MetaTabEntry *entries,
   popup->current = NULL;
   popup->entries = NULL;
   popup->current_selected_entry = NULL;
-  popup->outline = outline;
+  popup->border = border;
 
-  screen_width = gdk_screen_get_width (screen);
+  screen_width = WidthOfScreen (gdk_x11_screen_get_xscreen (screen));
   for (i = 0; i < entry_count; ++i)
     {
-      TabEntry* new_entry = tab_entry_new (&entries[i], screen_width, outline);
+      TabEntry* new_entry = tab_entry_new (&entries[i], screen_width,
+        border & BORDER_OUTLINE_WINDOW);
       popup->entries = g_list_prepend (popup->entries, new_entry);
     }
 
@@ -326,7 +329,7 @@ meta_ui_tab_popup_new (const MetaTabEntry *entries,
               /* just stick a widget here to avoid special cases */
               image = gtk_label_new ("");
             }
-          else if (outline)
+          else if (border & BORDER_OUTLINE_TAB)
             {
               if (te->dimmed_icon)
                 {
@@ -451,7 +454,7 @@ display_entry (MetaTabPopup *popup,
 
   if (popup->current_selected_entry)
   {
-    if (popup->outline)
+    if (popup->border & BORDER_OUTLINE_TAB)
       unselect_image (popup->current_selected_entry->widget);
     else
       unselect_workspace (popup->current_selected_entry->widget);
@@ -459,12 +462,12 @@ display_entry (MetaTabPopup *popup,
 
   gtk_label_set_markup (GTK_LABEL (popup->label), te->title);
 
-  if (popup->outline)
+  if (popup->border & BORDER_OUTLINE_TAB)
     select_image (te->widget);
   else
     select_workspace (te->widget);
 
-  if (popup->outline)
+  if (popup->border & BORDER_OUTLINE_WINDOW)
     {
       window = gtk_widget_get_window (popup->outline_window);
 

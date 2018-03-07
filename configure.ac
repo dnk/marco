@@ -1,7 +1,7 @@
 AC_PREREQ(2.50)
 
 m4_define([marco_major_version], [1])
-m4_define([marco_minor_version], [17])
+m4_define([marco_minor_version], [20])
 m4_define([marco_micro_version], [0])
 
 m4_define([marco_version],
@@ -104,7 +104,7 @@ fi
 changequote([,])dnl
 
 GIO_MIN_VERSION=2.25.10
-GTK_MIN_VERSION=3.14.0
+GTK_MIN_VERSION=3.22.0
 
 MARCO_PC_MODULES="gtk+-3.0 >= $GTK_MIN_VERSION gio-2.0 >= $GIO_MIN_VERSION pango >= 1.2.0 libcanberra-gtk3"
 
@@ -154,15 +154,9 @@ AC_CHECK_HEADERS(execinfo.h, [AC_CHECK_FUNCS(backtrace)])
 
 AM_GLIB_GNU_GETTEXT
 
-PKG_CHECK_MODULES(ALL, glib-2.0 >= 2.36.0)
+PKG_CHECK_MODULES(ALL, glib-2.0 >= 2.50.0)
 PKG_CHECK_MODULES(MARCO_MESSAGE, gtk+-3.0 >= $GTK_MIN_VERSION)
 PKG_CHECK_MODULES(MARCO_WINDOW_DEMO, gtk+-3.0 >= $GTK_MIN_VERSION)
-
-if $PKG_CONFIG --atleast-version 1.2.0 pangoxft; then
-   echo "pangoxft found"
-else
-   AC_MSG_ERROR("Pango 1.2.0 or greater based on Xft2 is required")
-fi
 
 # Unconditionally use this dir to avoid a circular dep with matecc
 MATE_KEYBINDINGS_KEYSDIR="${datadir}/mate-control-center/keybindings"
@@ -415,7 +409,19 @@ if test "x$found_xsync" = "xyes"; then
    AC_DEFINE(HAVE_XSYNC, , [Have the Xsync extension library])
 fi
 
-MARCO_LIBS="$MARCO_LIBS $XSYNC_LIBS $RANDR_LIBS $SHAPE_LIBS $X_LIBS $X_PRE_LIBS -lX11 $X_EXTRA_LIBS -lm"
+XPRESENT_LIBS=
+found_xpresent=no
+AC_CHECK_LIB(Xpresent, XPresentPixmap,
+               [AC_CHECK_HEADER(X11/extensions/Xpresent.h,
+                                XPRESENT_LIBS=-lXpresent found_xpresent=yes,,
+        [#include <X11/Xlib.h>])],
+               , $ALL_X_LIBS)
+
+if test "x$found_xpresent" = "xyes"; then
+   AC_DEFINE(HAVE_PRESENT, , [Have the Xpresent extension library])
+fi
+
+MARCO_LIBS="$MARCO_LIBS $XSYNC_LIBS $RANDR_LIBS $SHAPE_LIBS $XPRESENT_LIBS $X_LIBS $X_PRE_LIBS -lX11 $X_EXTRA_LIBS -lm"
 MARCO_MESSAGE_LIBS="$MARCO_MESSAGE_LIBS $X_LIBS $X_PRE_LIBS -lX11 $X_EXTRA_LIBS"
 MARCO_WINDOW_DEMO_LIBS="$MARCO_WINDOW_DEMO_LIBS $X_LIBS $X_PRE_LIBS -lX11 $X_EXTRA_LIBS"
 MARCO_PROPS_LIBS="$MARCO_PROPS_LIBS $X_LIBS $X_PRE_LIBS -lX11 $X_EXTRA_LIBS"
@@ -523,6 +529,7 @@ marco-$VERSION:
 	Shape extension:          ${found_shape}
 	Resize-and-rotate:        ${found_randr}
 	Xsync:                    ${found_xsync}
+	Xpresent:                 ${found_xpresent}
 	Render:                   ${have_xrender}
 	Xcursor:                  ${have_xcursor}
 "

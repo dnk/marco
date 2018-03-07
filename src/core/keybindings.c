@@ -24,7 +24,7 @@
  */
 
 #define _GNU_SOURCE
-#define _SVID_SOURCE /* for putenv() */
+#define _XOPEN_SOURCE /* for putenv() */
 
 #include <config.h>
 #include "keybindings.h"
@@ -37,6 +37,8 @@
 #include "prefs.h"
 #include "effects.h"
 #include "util.h"
+
+#include <gio/gio.h>
 
 #include <X11/keysym.h>
 #include <string.h>
@@ -64,6 +66,8 @@ handler (MetaDisplay    *display,\
          XEvent         *event,\
          MetaKeyBinding *binding);
 #include "all-keybindings.h"
+#include "../include/util.h"
+
 #undef keybind
 
 /* These can't be bound to anything, but they are used to handle
@@ -71,11 +75,12 @@ handler (MetaDisplay    *display,\
  * handler functions and have some kind of flag to say they're unbindable.
  */
 
-static void handle_workspace_switch  (MetaDisplay    *display,
-                                      MetaScreen     *screen,
-                                      MetaWindow     *window,
-                                      XEvent         *event,
-                                      MetaKeyBinding *binding);
+static void handle_workspace_switch_or_move  (MetaDisplay    *display,
+                                              MetaScreen     *screen,
+                                              MetaWindow     *window,
+                                              XEvent         *event,
+                                              MetaKeyBinding *binding,
+                                              gboolean        is_move);
 
 static gboolean process_mouse_move_resize_grab (MetaDisplay *display,
                                                 MetaScreen  *screen,
@@ -102,6 +107,7 @@ static gboolean process_tab_grab           (MetaDisplay *display,
 
 static gboolean process_workspace_switch_grab (MetaDisplay *display,
                                                MetaScreen  *screen,
+                                               MetaWindow  *window,
                                                XEvent      *event,
                                                KeySym       keysym);
 
@@ -1306,6 +1312,14 @@ meta_display_process_key_event (MetaDisplay *display,
       meta_ui_window_is_widget (screen->ui, event->xany.window))
     return;
 
+  /* Use focused window when processing synthetic events from another client */
+  if (window == NULL && event->xkey.send_event) {
+    Window focus = None;
+    int ret_to = RevertToPointerRoot;
+    XGetInputFocus (display->xdisplay, &focus, &ret_to);
+    window = meta_display_lookup_x_window (display, focus);
+  }
+
   /* window may be NULL */
 
 #ifdef HAVE_XKB
@@ -1392,11 +1406,11 @@ meta_display_process_key_event (MetaDisplay *display,
               break;
 
             case META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING:
+            case META_GRAB_OP_KEYBOARD_WORKSPACE_MOVING:
               meta_topic (META_DEBUG_KEYBINDINGS,
                           "Processing event for keyboard workspace switching\n");
-              keep_grab = process_workspace_switch_grab (display, screen, event, keysym);
+              keep_grab = process_workspace_switch_grab (display, screen, window, event, keysym);
               break;
-
             default:
               break;
             }
@@ -1445,7 +1459,8 @@ process_mouse_move_resize_grab (MetaDisplay *display,
         meta_window_maximize (window,
                               META_MAXIMIZE_HORIZONTAL |
                               META_MAXIMIZE_VERTICAL);
-      else if (window->tile_mode == META_TILE_LEFT || window->tile_mode == META_TILE_RIGHT)
+      else if (window->tile_mode != META_TILE_MAXIMIZED &&
+               window->tile_mode != META_TILE_NONE)
         meta_window_tile (window);
       else if (!display->grab_wireframe_active)
         meta_window_move_resize (display->grab_window,
@@ -2215,6 +2230,15 @@ process_tab_grab (MetaDisplay *display,
       break;
     }
 
+  /* Allow use of arrows while in window switching mode */
+  if (event->xkey.keycode == ARROW_RIGHT || event->xkey.keycode == ARROW_RIGHT_PAD)
+    key_used = TRUE;
+  else if (event->xkey.keycode == ARROW_LEFT || event->xkey.keycode == ARROW_LEFT_PAD)
+    {
+      key_used = TRUE;
+      backward = TRUE;
+    }
+
   if (key_used)
     {
       meta_topic (META_DEBUG_KEYBINDINGS,
@@ -2309,7 +2333,7 @@ handle_switch_to_workspace (MetaDisplay    *display,
        * Note that we're the only caller of that function, so perhaps
        * we should merge with it.
        */
-      handle_workspace_switch (display, screen, event_window, event, binding);
+      handle_workspace_switch_or_move (display, screen, event_window, event, binding, FALSE);
       return;
     }
 
@@ -2534,7 +2558,7 @@ handle_move_to_corner_backend (MetaDisplay    *display,
   }
 
   meta_window_move_resize (window,
-          FALSE,
+          TRUE,
           new_x,
           new_y,
           window->rect.width,
@@ -2628,12 +2652,16 @@ handle_move_to_center  (MetaDisplay    *display,
                         XEvent         *event,
                         MetaKeyBinding *binding)
 {
+  const MetaXineramaScreenInfo* current;
   MetaRectangle work_area;
   MetaRectangle outer;
   int orig_x, orig_y;
   int frame_width, frame_height;
 
-  meta_window_get_work_area_all_xineramas (window, &work_area);
+  current = meta_screen_get_xinerama_for_window(screen, window);
+  meta_window_get_work_area_for_xinerama (window,
+                                          current->number,
+                                          &work_area);
   meta_window_get_outer_rect (window, &outer);
   meta_window_get_position (window, &orig_x, &orig_y);
 
@@ -2648,9 +2676,34 @@ handle_move_to_center  (MetaDisplay    *display,
           window->rect.height);
 }
 
+
+static void
+handle_move_to_monitor  (MetaDisplay    *display,
+                         MetaScreen     *screen,
+                         MetaWindow     *window,
+                         XEvent         *event,
+                         MetaKeyBinding *binding)
+{  
+  const MetaScreenDirection move_direction = binding->handler->data;
+  const MetaXineramaScreenInfo* current;
+  const MetaXineramaScreenInfo* neighbour;
+  
+  current = meta_screen_get_xinerama_for_window(screen, window);
+  neighbour = meta_screen_get_xinerama_neighbor(screen, current->number, move_direction);
+
+  if(neighbour == NULL ||
+     current->number == neighbour->number)
+    return;
+
+  meta_window_move_to_monitor(window,
+                              current,
+                              neighbour);
+}
+
 static gboolean
 process_workspace_switch_grab (MetaDisplay *display,
                                MetaScreen  *screen,
+                               MetaWindow  *window,
                                XEvent      *event,
                                KeySym       keysym)
 {
@@ -2679,12 +2732,15 @@ process_workspace_switch_grab (MetaDisplay *display,
                       "Ending grab so we can focus on the target workspace\n");
           meta_display_end_grab_op (display, event->xkey.time);
 
-          meta_topic (META_DEBUG_KEYBINDINGS,
-                      "Focusing default window on target workspace\n");
 
-          meta_workspace_focus_default_window (target_workspace,
-                                               NULL,
-                                               event->xkey.time);
+          if(display->grab_op == META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING)
+            {
+              meta_topic (META_DEBUG_KEYBINDINGS,
+                          "Focusing default window on target workspace\n");
+              meta_workspace_focus_default_window (target_workspace,
+                                                   NULL,
+                                                   event->xkey.time);
+            }
 
           return TRUE; /* we already ended the grab */
         }
@@ -2720,21 +2776,25 @@ process_workspace_switch_grab (MetaDisplay *display,
       switch (action)
         {
         case META_KEYBINDING_ACTION_WORKSPACE_UP:
+        case META_KEYBINDING_ACTION_WORKSPACE_MOVE_UP:
           target_workspace = meta_workspace_get_neighbor (workspace,
                                                           META_MOTION_UP);
           break;
 
         case META_KEYBINDING_ACTION_WORKSPACE_DOWN:
+        case META_KEYBINDING_ACTION_WORKSPACE_MOVE_DOWN:
           target_workspace = meta_workspace_get_neighbor (workspace,
                                                           META_MOTION_DOWN);
           break;
 
         case META_KEYBINDING_ACTION_WORKSPACE_LEFT:
+        case META_KEYBINDING_ACTION_WORKSPACE_MOVE_LEFT:
           target_workspace = meta_workspace_get_neighbor (workspace,
                                                           META_MOTION_LEFT);
           break;
 
         case META_KEYBINDING_ACTION_WORKSPACE_RIGHT:
+        case META_KEYBINDING_ACTION_WORKSPACE_MOVE_RIGHT:
           target_workspace = meta_workspace_get_neighbor (workspace,
                                                           META_MOTION_RIGHT);
           break;
@@ -2754,7 +2814,18 @@ process_workspace_switch_grab (MetaDisplay *display,
           meta_topic (META_DEBUG_KEYBINDINGS,
                       "Activating target workspace\n");
 
-          meta_workspace_activate (target_workspace, event->xkey.time);
+          if(display->grab_op == META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING)
+            meta_workspace_activate (target_workspace, event->xkey.time);
+          else
+            {
+              meta_window_change_workspace (window, target_workspace);
+              target_workspace->screen->display->mouse_mode = FALSE;
+              meta_workspace_activate_with_focus (target_workspace,
+                                                  window,
+                                                  event->xkey.time);
+            }
+            
+          
 
           return TRUE; /* we already ended the grab */
         }
@@ -2765,7 +2836,10 @@ process_workspace_switch_grab (MetaDisplay *display,
               "Ending workspace tabbing & focusing default window; uninteresting key pressed\n");
   workspace =
     (MetaWorkspace *) meta_ui_tab_popup_get_selected (screen->tab_popup);
-  meta_workspace_focus_default_window (workspace, NULL, event->xkey.time);
+  
+  if(display->grab_op == META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING)
+    meta_workspace_focus_default_window (workspace, NULL, event->xkey.time);
+  
   return FALSE;
 }
 
@@ -3067,27 +3141,16 @@ handle_toggle_tiled (MetaDisplay *display,
 {
   MetaTileMode mode = binding->handler->data;
 
-  if ((META_WINDOW_TILED_LEFT (window) && mode == META_TILE_LEFT) ||
-      (META_WINDOW_TILED_RIGHT (window) && mode == META_TILE_RIGHT))
+  if (mode == window->tile_mode && META_WINDOW_TILED(window))
     {
-      if (window->saved_maximize)
-        {
-          window->tile_mode = META_TILE_MAXIMIZED;
-          window->tile_monitor_number = meta_screen_get_xinerama_for_window (window->screen, window)->number;
-          meta_window_maximize (window, META_MAXIMIZE_VERTICAL |
-                                        META_MAXIMIZE_HORIZONTAL);
-        }
-      else
-        {
-          window->tile_mode = META_TILE_NONE;
-          window->tile_monitor_number = -1;
-          meta_window_unmaximize (window, META_MAXIMIZE_VERTICAL |
-                                          META_MAXIMIZE_HORIZONTAL);
-        }
+      window->tile_mode = META_TILE_NONE;
+      window->tile_monitor_number = -1;
+      meta_window_untile(window);
     }
   else if (meta_window_can_tile (window))
     {
       window->tile_mode = mode;
+      window->tile_resized = FALSE;
       window->tile_monitor_number = meta_screen_get_xinerama_for_window (window->screen, window)->number;
       /* Maximization constraints beat tiling constraints, so if the window
        * is maximized, tiling won't have any effect unless we unmaximize it
@@ -3103,6 +3166,7 @@ handle_toggle_tiled (MetaDisplay *display,
         window->saved_maximize = FALSE;
 
       window->maximized_horizontally = FALSE;
+      window->maximized_vertically = FALSE;
       meta_window_tile (window);
     }
 }
@@ -3144,7 +3208,9 @@ handle_unmaximize         (MetaDisplay    *display,
                            XEvent         *event,
                            MetaKeyBinding *binding)
 {
-  if (window->maximized_vertically || window->maximized_horizontally)
+  if (window->maximized_vertically ||
+      window->maximized_horizontally ||
+      META_WINDOW_CORNER_TILED((window)))
     meta_window_unmaximize (window,
                             META_MAXIMIZE_HORIZONTAL |
                             META_MAXIMIZE_VERTICAL);
@@ -3238,7 +3304,6 @@ handle_move_to_workspace  (MetaDisplay    *display,
                               MetaKeyBinding *binding)
 {
   gint which = binding->handler->data;
-  gboolean flip = (which < 0);
   MetaWorkspace *workspace;
 
   /* If which is zero or positive, it's a workspace number, and the window
@@ -3252,31 +3317,18 @@ handle_move_to_workspace  (MetaDisplay    *display,
   if (window->always_sticky)
     return;
 
-  workspace = NULL;
-  if (flip)
+  if (which < 0)
     {
-      workspace = meta_workspace_get_neighbor (screen->active_workspace,
-                                               which);
+      handle_workspace_switch_or_move (display, screen, window, event, binding, TRUE);
+      return;
     }
-  else
-    {
-      workspace = meta_screen_get_workspace_by_index (screen, which);
-    }
+  
+  workspace = meta_screen_get_workspace_by_index (screen, which);
 
   if (workspace)
     {
       /* Activate second, so the window is never unmapped */
       meta_window_change_workspace (window, workspace);
-      if (flip)
-        {
-          meta_topic (META_DEBUG_FOCUS,
-                      "Resetting mouse_mode to FALSE due to "
-                      "handle_move_to_workspace() call with flip set.\n");
-          workspace->screen->display->mouse_mode = FALSE;
-          meta_workspace_activate_with_focus (workspace,
-                                              window,
-                                              event->xkey.time);
-        }
     }
   else
     {
@@ -3351,11 +3403,12 @@ handle_lower (MetaDisplay    *display,
 }
 
 static void
-handle_workspace_switch  (MetaDisplay    *display,
-                          MetaScreen     *screen,
-                          MetaWindow     *window,
-                          XEvent         *event,
-                          MetaKeyBinding *binding)
+handle_workspace_switch_or_move  (MetaDisplay    *display,
+                                  MetaScreen     *screen,
+                                  MetaWindow     *window,
+                                  XEvent         *event,
+                                  MetaKeyBinding *binding,
+                                  gboolean        is_move)
 {
   gint motion = binding->handler->data;
   unsigned int grab_mask;
@@ -3369,13 +3422,17 @@ handle_workspace_switch  (MetaDisplay    *display,
   meta_topic (META_DEBUG_KEYBINDINGS,
               "Starting tab between workspaces, showing popup\n");
 
+  MetaGrabOp grab_op = is_move ?
+    META_GRAB_OP_KEYBOARD_WORKSPACE_MOVING
+    : META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING;
+
   /* FIXME should we use binding->mask ? */
   grab_mask = event->xkey.state & ~(display->ignored_modifier_mask);
 
   if (meta_display_begin_grab_op (display,
                                   screen,
-                                  NULL,
-                                  META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING,
+                                  is_move ? window : NULL,
+                                  grab_op,
                                   FALSE,
                                   FALSE,
                                   0,
@@ -3404,7 +3461,19 @@ handle_workspace_switch  (MetaDisplay    *display,
           meta_display_end_grab_op (display, event->xkey.time);
         }
 
-      meta_workspace_activate (next, event->xkey.time);
+      if(is_move)
+        {
+          meta_window_change_workspace (window, next);
+          meta_topic (META_DEBUG_FOCUS,
+                      "Resetting mouse_mode to FALSE due to "
+                      "handle_move_to_workspace() call with flip set.\n");
+          next->screen->display->mouse_mode = FALSE;
+          meta_workspace_activate_with_focus (next,
+                                              window,
+                                              event->xkey.time);
+        }
+      else
+        meta_workspace_activate (next, event->xkey.time);
 
       if (grabbed_before_release)
         {
@@ -3468,5 +3537,156 @@ handle_run_terminal (MetaDisplay    *display,
                         event->xkey.time);
 
       g_error_free (err);
+    }
+}
+
+static gboolean already_displaying_rename_workspace = FALSE;
+#define RENAME_WORKSPACE_BUFSIZE 512
+
+static gboolean
+handle_rename_workspace_callback(GIOChannel *ioc, GIOCondition cond, gpointer data)
+{
+  meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: called.\n");
+  gint *workspace_index = data;
+  
+  if (!already_displaying_rename_workspace)
+    {
+      meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: done, already_displaying_rename_workspace=FALSE\n");
+      return FALSE;
+    }
+  
+  if (cond & G_IO_HUP)
+    {
+      meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: done.\n");
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  
+  if (cond & G_IO_ERR )
+    {
+      meta_warning ("handle_rename_workspace_callback: error. G_IO_ERR.\n");
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  if (cond & G_IO_NVAL )
+    {
+      meta_warning ("handle_rename_workspace_callback: error. G_IO_NVAL.\n");
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  
+  meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: workspace_index=%d\n", *workspace_index);
+  if (*workspace_index < 0 || *workspace_index > 36)
+    {
+      meta_warning ("handle_rename_workspace_callback: invalid workspace_index=%d\n", *workspace_index);
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  
+  if (cond & (!G_IO_IN & !G_IO_PRI))
+    {
+      meta_warning ("handle_rename_workspace_callback: unknown error\n");
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  GIOStatus ret;
+  
+  gchar buf[RENAME_WORKSPACE_BUFSIZE];
+  gchar clean_buf[RENAME_WORKSPACE_BUFSIZE];
+  gsize buf_len = 0;
+  glong clean_buf_len = 0;
+  
+  memset (buf, 0x00, RENAME_WORKSPACE_BUFSIZE);
+  memset (clean_buf, 0x00, RENAME_WORKSPACE_BUFSIZE);
+
+  ret = g_io_channel_read_chars (ioc, buf, RENAME_WORKSPACE_BUFSIZE, &buf_len, NULL);
+
+  if (buf_len <= 0 || ret != G_IO_STATUS_NORMAL)
+    {
+      meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: error getting the new name.\n");
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  if (!g_utf8_validate (buf, -1, NULL))
+    {
+      meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: the string is not utf-8: %s\n", buf);
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+
+  clean_buf_len = g_utf8_strlen (buf, -1);
+  if (clean_buf_len <= 1)
+    {
+      meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace_callback: invalid name.\n");
+      g_free(workspace_index);
+      already_displaying_rename_workspace = FALSE;
+      return FALSE;
+    }
+  
+  g_utf8_strncpy (clean_buf, buf, clean_buf_len - 1);
+  meta_prefs_change_workspace_name(*workspace_index, clean_buf);
+  already_displaying_rename_workspace = FALSE;
+  
+  return TRUE;
+}
+
+static void
+handle_rename_workspace(MetaDisplay *display,
+                        MetaScreen *screen,
+                        MetaWindow *window,
+                        XEvent *event,
+                        MetaKeyBinding *binding)
+{
+  gchar *window_title, *window_content;
+  const char *entry_text;
+  GPid dialog_pid;
+  
+  meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace: called.\n");
+  
+  if (already_displaying_rename_workspace)
+    {
+      meta_topic (META_DEBUG_KEYBINDINGS,
+                  "handle_rename_workspace: return, already_displaying_rename_workspace=TRUE.\n");
+      return;
+    }
+  
+  window_title = g_strdup_printf (_("<tt>Rename Workspace</tt>"));
+  window_content = g_strdup_printf (_("New Workspace Name:"));
+  
+  gint *workspace_index = g_malloc (sizeof (gint));
+  *workspace_index = meta_workspace_index (screen->active_workspace);
+  meta_topic (META_DEBUG_KEYBINDINGS, "handle_rename_workspace: workspace_index=%d\n", *workspace_index);
+  
+  entry_text = meta_prefs_get_workspace_name(*workspace_index);
+  dialog_pid = meta_show_entry_dialog (window_content,
+                                       workspace_index,
+                                       entry_text,
+                                       screen->screen_name,
+                                       _("OK"), _("Cancel"),
+                                       0,
+                                       handle_rename_workspace_callback);
+  
+  g_free (window_title);
+  g_free (window_content);
+  if (dialog_pid > 0)
+    {
+      already_displaying_rename_workspace = TRUE;
+    }
+  else
+    {
+      g_free(workspace_index);
     }
 }

@@ -36,6 +36,13 @@ typedef struct _MetaTabEntry MetaTabEntry;
 typedef struct _MetaTabPopup MetaTabPopup;
 typedef void *MetaTabEntryKey;
 
+typedef enum border_outline_t
+{
+  BORDER_OUTLINE_WINDOW = 1,
+  BORDER_OUTLINE_TAB = 2,
+  BORDER_OUTLINE_WORKSPACE = 4
+} border_outline_t;
+
 struct _MetaTabEntry
 {
   MetaTabEntryKey  key;
@@ -49,7 +56,6 @@ struct _MetaTabEntry
 };
 
 MetaTabPopup*   meta_ui_tab_popup_new          (const MetaTabEntry *entries,
-                                                int                 screen_number,
                                                 int                 entry_count,
                                                 int                 width,
                                                 gboolean            outline);

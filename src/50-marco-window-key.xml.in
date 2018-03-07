@@ -78,6 +78,22 @@
 	_description="Tile window to west (left) side of screen" />
 
 	<KeyListEntry
+	name="tile-to-corner-nw"
+	_description="Tile window to north-west (top left) corner" />
+
+	<KeyListEntry
+	name="tile-to-corner-ne"
+	_description="Tile window to north-east (top right) corner" />
+
+	<KeyListEntry
+	name="tile-to-corner-sw"
+	_description="Tile window to south-west (bottom left) corner" />
+
+	<KeyListEntry
+	name="tile-to-corner-se"
+	_description="Tile window to south-east (bottom right) corner" />
+
+	<KeyListEntry
 	name="move-to-corner-nw"
 	_description="Move window to north-west (top left) corner" />
 
@@ -112,6 +128,22 @@
 	<KeyListEntry
 	name="move-to-center"
 	_description="Move window to center of screen" />
+
+	<KeyListEntry
+	name="move-to-monitor-n"
+	_description="Move window to north (top) monitor" />
+
+	<KeyListEntry
+	name="move-to-monitor-s"
+	_description="Move window to south (bottom) monitor" />
+
+	<KeyListEntry
+	name="move-to-monitor-e"
+	_description="Move window to east (right) monitor" />
+
+	<KeyListEntry
+	name="move-to-monitor-w"
+	_description="Move window to west (left) monitor" />
 
 	<KeyListEntry
 	name="move-to-workspace-1"

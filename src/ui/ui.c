@@ -62,6 +62,11 @@ void meta_ui_init(int* argc, char*** argv)
 	{
 		meta_fatal ("Unable to open X display %s\n", XDisplayName (NULL));
 	}
+
+  /* We need to be able to fully trust that the window and monitor sizes
+   * that GDK reports corresponds to the X ones, so we disable the automatic
+   * scale handling */
+  gdk_x11_display_set_window_scale (gdk_display_get_default (), 1);
 }
 
 Display* meta_ui_get_display(void)
@@ -89,7 +94,7 @@ maybe_redirect_mouse_event (XEvent *xevent)
 {
   GdkDisplay *gdisplay;
   MetaUI *ui;
-  GdkDeviceManager *gmanager;
+  GdkSeat *seat;
   GdkDevice *gdevice;
   GdkEvent *gevent;
   GdkWindow *gdk_window;
@@ -121,8 +126,8 @@ maybe_redirect_mouse_event (XEvent *xevent)
   if (gdk_window == NULL)
     return FALSE;
 
-  gmanager = gdk_display_get_device_manager (gdisplay);
-  gdevice = gdk_device_manager_get_client_pointer (gmanager);
+  seat = gdk_display_get_default_seat (gdisplay);
+  gdevice = gdk_seat_get_pointer (seat);
 
   /* If GDK already thinks it has a grab, we better let it see events; this
    * is the menu-navigation case and events need to get sent to the appropriate
@@ -270,7 +275,7 @@ meta_ui_new (Display *xdisplay,
   g_assert (gdisplay == gdk_display_get_default ());
 
   g_assert (xdisplay == GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
-  ui->frames = meta_frames_new (XScreenNumberOfScreen (screen));
+  ui->frames = meta_frames_new ();
   /* This does not actually show any widget. MetaFrames has been hacked so
    * that showing it doesn't actually do anything. But we need the flags
    * set for GTK to deliver events properly. */
@@ -312,11 +317,10 @@ meta_ui_create_frame_window (MetaUI *ui,
 			     gint x,
 			     gint y,
 			     gint width,
-			     gint height,
-			     gint screen_no)
+			     gint height)
 {
   GdkDisplay *display = gdk_x11_lookup_xdisplay (xdisplay);
-  GdkScreen *screen = gdk_display_get_screen (display, screen_no);
+  GdkScreen *screen = gdk_display_get_default_screen (display);
   GdkWindowAttr attrs;
   gint attributes_mask;
   GdkWindow *window;
@@ -677,7 +681,7 @@ meta_ui_theme_get_frame_borders (MetaUI *ui,
       if (!font_desc)
         {
           GdkDisplay *display = gdk_x11_lookup_xdisplay (ui->xdisplay);
-          GdkScreen *screen = gdk_display_get_screen (display, XScreenNumberOfScreen (ui->xscreen));
+          GdkScreen *screen = gdk_display_get_default_screen (display);
           GtkWidgetPath *widget_path;
 
           style = gtk_style_context_new ();

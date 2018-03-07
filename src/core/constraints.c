@@ -206,6 +206,11 @@ static inline void get_size_limits       (const MetaWindow        *window,
                                           MetaRectangle *min_size,
                                           MetaRectangle *max_size);
 
+static void can_resize_tiled         (guint tile_mode,
+                                          int resize_gravity,
+                                          gboolean *resize_horizontally,
+                                          gboolean *resize_vertically);
+
 typedef gboolean (* ConstraintFunc) (MetaWindow         *window,
                                      ConstraintInfo     *info,
                                      ConstraintPriority  priority,
@@ -876,12 +881,14 @@ constrain_tiling (MetaWindow         *window,
   gboolean hminbad, vminbad;
   gboolean horiz_equal, vert_equal;
   gboolean constraint_already_satisfied;
+  gboolean allow_resize_horizontally = FALSE;
+  gboolean allow_resize_vertically = FALSE;
 
   if (priority > PRIORITY_TILING)
     return TRUE;
 
   /* Determine whether constraint applies; exit if it doesn't */
-  if (!META_WINDOW_TILED (window))
+  if (!META_WINDOW_TILED(window))
     return TRUE;
 
   /* Calculate target_size - as the tile previews need this as well, we
@@ -908,13 +915,119 @@ constrain_tiling (MetaWindow         *window,
   if (check_only || constraint_already_satisfied)
     return constraint_already_satisfied;
 
-  /*** Enforce constraint ***/
-  info->current.x      = target_size.x;
-  info->current.width  = target_size.width;
-  info->current.y      = target_size.y;
-  info->current.height = target_size.height;
+  /* Allow the user to resize horizontally when tiled */
+  if (info->is_user_action)
+    {
+      can_resize_tiled(window->tile_mode,
+                       info->resize_gravity,
+                       &allow_resize_horizontally,
+                       &allow_resize_vertically);
+      
+      window->tile_resized = TRUE;
+    }
 
+  if (window->tile_resized)
+    {
+      /* Maintain current tile size for user-resized windows */
+      target_size.y = info->orig.y;
+      target_size.height = info->orig.height;
+      target_size.x = info->orig.x;
+      target_size.width = info->orig.width;
+    }
+
+  /*** Enforce constraint ***/
+  if (!allow_resize_vertically)
+    {
+      info->current.y      = target_size.y;
+      info->current.height = target_size.height;
+    }
+
+  if(!allow_resize_horizontally)
+    {    
+      info->current.x      = target_size.x;
+      info->current.width  = target_size.width;
+    }
+  
   return TRUE;
+}
+
+static void
+can_resize_tiled (guint tile_mode,
+                  int resize_gravity,
+                  gboolean *resize_horizontally,
+                  gboolean *resize_vertically)
+{
+  switch(tile_mode)
+    {
+    case META_TILE_RIGHT:
+      if (resize_gravity == EastGravity)
+        *resize_horizontally = TRUE;
+      break;
+    case META_TILE_LEFT:
+      if(resize_gravity == WestGravity)
+        *resize_horizontally = TRUE;
+      break;
+    case META_TILE_TOP_RIGHT:
+      switch(resize_gravity)
+        {
+        case EastGravity:
+          *resize_horizontally = TRUE;
+          break;
+        case NorthGravity:
+          *resize_vertically = TRUE;
+          break;
+        case NorthEastGravity:
+          *resize_horizontally = TRUE;
+          *resize_vertically = TRUE;
+          break;
+        }
+      break;
+    case META_TILE_TOP_LEFT:
+      switch(resize_gravity)
+        {
+        case WestGravity:
+          *resize_horizontally = TRUE;
+          break;
+        case NorthGravity:
+          *resize_vertically = TRUE;
+          break;
+        case NorthWestGravity:
+          *resize_horizontally = TRUE;
+          *resize_vertically = TRUE;
+          break;
+        }
+      break;
+    case META_TILE_BOTTOM_RIGHT:
+      switch(resize_gravity)
+        {
+        case EastGravity:
+          *resize_horizontally = TRUE;
+          break;
+        case SouthGravity:
+          *resize_vertically = TRUE;
+          break;
+        case SouthEastGravity:
+          *resize_horizontally = TRUE;
+          *resize_vertically = TRUE;
+          break;
+        }
+      break;
+    case META_TILE_BOTTOM_LEFT:
+      switch(resize_gravity)
+        {
+        case WestGravity:
+          *resize_horizontally = TRUE;
+          break;
+        case SouthGravity:
+          *resize_vertically = TRUE;
+          break;
+        case SouthWestGravity:
+          *resize_horizontally = TRUE;
+          *resize_vertically = TRUE;
+          break;
+        }
+      break;
+    }
 }
 
 static gboolean
@@ -1099,7 +1212,7 @@ constrain_aspect_ratio (MetaWindow         *window,
   constraints_are_inconsistent = minr > maxr;
   if (constraints_are_inconsistent ||
       META_WINDOW_MAXIMIZED (window) || window->fullscreen ||
-      META_WINDOW_TILED (window) || info->action_type == ACTION_MOVE)
+      META_WINDOW_SIDE_TILED (window) || info->action_type == ACTION_MOVE)
     return TRUE;
 
   /* Determine whether constraint is already satisfied; exit if it is.  We

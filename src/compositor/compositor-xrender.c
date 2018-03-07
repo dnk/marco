@@ -39,6 +39,7 @@
 #include <cairo/cairo-xlib.h>
 
 #include "display.h"
+#include "../core/display-private.h"
 #include "screen.h"
 #include "frame.h"
 #include "errors.h"
@@ -52,6 +53,10 @@
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/Xrender.h>
+
+#ifdef HAVE_PRESENT
+#include <X11/extensions/Xpresent.h>
+#endif
 
 #define USE_IDLE_REPAINT 1
 
@@ -103,6 +108,11 @@ typedef struct _MetaCompositorXRender
   guint enabled : 1;
   guint show_redraw : 1;
   guint debug : 1;
+
+#ifdef HAVE_PRESENT
+  guint has_present : 1;
+  int present_major;
+#endif /* HAVE_PRESENT */
 } MetaCompositorXRender;
 
 typedef struct _conv
@@ -118,6 +128,7 @@ typedef struct _shadow
   guchar *shadow_top;
 } shadow;
 
+#define NUM_BUFFER      2
 typedef struct _MetaCompScreen
 {
   MetaScreen *screen;
@@ -132,11 +143,20 @@ typedef struct _MetaCompScreen
   shadow *shadows[LAST_SHADOW_TYPE];
 
   Picture root_picture;
-  Picture root_buffer;
+  Picture root_buffers[NUM_BUFFER];
+  Pixmap  root_pixmaps[NUM_BUFFER];
+  int root_current;
   Picture black_picture;
   Picture trans_black_picture;
   Picture root_tile;
   XserverRegion all_damage;
+#ifdef HAVE_PRESENT
+  XserverRegion prev_damage;
+
+  XID present_eid;
+  gboolean use_present;
+  gboolean present_pending;
+#endif /* HAVE_PRESENT */
 
   guint overlays;
   gboolean compositor_active;
@@ -675,6 +695,26 @@ find_window_for_child_window_in_display (MetaDisplay *display,
   return NULL;
 }
 
+#ifdef HAVE_PRESENT
+static MetaScreen *
+find_screen_from_output(MetaDisplay *display, Window output)
+{
+  int i;
+  Display *xdisplay = meta_display_get_xdisplay(display);
+
+  for (i = 0; i < ScreenCount(xdisplay); i++)
+    {
+      MetaScreen *screen = meta_display_screen_for_x_screen(display,
+                                                            ScreenOfDisplay(xdisplay, i));
+      MetaCompScreen *info = meta_screen_get_compositor_data(screen);
+
+      if (info->output == output)
+        return screen;
+    }
+  return NULL;
+}
+#endif /* HAVE_PRESENT */
+
 static Picture
 solid_picture (MetaDisplay *display,
                MetaScreen  *screen,
@@ -796,16 +836,14 @@ root_tile (MetaScreen *screen)
   return picture;
 }
 
-static Picture
-create_root_buffer (MetaScreen *screen)
+static Pixmap
+create_root_pixmap (MetaScreen *screen)
 {
   MetaDisplay *display = meta_screen_get_display (screen);
   Display *xdisplay = meta_display_get_xdisplay (display);
   MetaCompScreen *info = meta_screen_get_compositor_data (screen);
-  Picture pict;
-  XRenderPictFormat *format;
-  Pixmap root_pixmap;
-  Visual *visual;
+  Window xroot = meta_screen_get_xroot (screen);
+  Pixmap pixmap;
   int depth, screen_width, screen_height, screen_number;
 
   if (info == NULL)
@@ -815,19 +853,39 @@ create_root_buffer (MetaScreen *screen)
 
   meta_screen_get_size (screen, &screen_width, &screen_height);
   screen_number = meta_screen_get_screen_number (screen);
-  visual = DefaultVisual (xdisplay, screen_number);
+
   depth = DefaultDepth (xdisplay, screen_number);
+  pixmap = XCreatePixmap (xdisplay, xroot,
+                          screen_width, screen_height,
+                          depth);
+
+  return pixmap;
+}
+
+static Picture
+create_root_buffer (MetaScreen *screen, Pixmap root_pixmap)
+{
+  MetaDisplay *display = meta_screen_get_display (screen);
+  Display *xdisplay = meta_display_get_xdisplay (display);
+  MetaCompScreen *info = meta_screen_get_compositor_data (screen);
+  Picture pict;
+  XRenderPictFormat *format;
+  Visual *visual;
+  int screen_number;
+
+  if (info == NULL)
+    {
+      return None;
+    }
+  g_return_val_if_fail (root_pixmap != None, None);
+
+  screen_number = meta_screen_get_screen_number (screen);
+  visual = DefaultVisual (xdisplay, screen_number);
 
   format = XRenderFindVisualFormat (xdisplay, visual);
   g_return_val_if_fail (format != NULL, None);
 
-  root_pixmap = XCreatePixmap (xdisplay, info->output,
-                               screen_width, screen_height, depth);
-  g_return_val_if_fail (root_pixmap != None, None);
-
   pict = XRenderCreatePicture (xdisplay, root_pixmap, format, 0, NULL);
-  XFreePixmap (xdisplay, root_pixmap);
-
   return pict;
 }
 
@@ -1106,10 +1164,57 @@ paint_dock_shadows (MetaScreen   *screen,
     }
 }
 
+#ifdef HAVE_PRESENT
+static gboolean
+present_flip (MetaScreen *screen, XserverRegion region, Pixmap pixmap)
+{
+  static uint32_t present_serial;
+  gboolean debug;
+
+  MetaCompScreen *info = meta_screen_get_compositor_data (screen);
+  MetaDisplay *display = meta_screen_get_display (screen);
+  Display *xdisplay = meta_display_get_xdisplay (display);
+
+  meta_error_trap_push (display);
+  XPresentPixmap(xdisplay,
+                 info->output,
+                 pixmap,
+                 present_serial,
+                 None,
+                 region,
+                 0, 0,
+                 None, None, None, PresentOptionNone,
+                 0, 1, 0, NULL, 0);
+
+  int error_code;
+  error_code = meta_error_trap_pop_with_return (display, FALSE);
+  if (error_code)
+    {
+      debug = DISPLAY_COMPOSITOR (display)->debug;
+
+      if (debug)
+        fprintf (stderr, "XPresentPixmap window %p pixmap %p error: %i\n",
+                 (void *)info->output, (void *)pixmap, error_code);
+
+      if (error_code == BadWindow)
+        g_warning ("XPresent is not compatible with your current system configuration.");
+
+      /* Disable the Present extension for this session to prevent frozen windows */
+      info->use_present = FALSE;
+      return FALSE;
+    }
+
+  present_serial++;
+
+  return TRUE;
+}
+#endif /* HAVE_PRESENT */
+
 static void
 paint_windows (MetaScreen   *screen,
                GList        *windows,
                Picture       root_buffer,
+               Pixmap        root_pixmap,
                XserverRegion region)
 {
   MetaDisplay *display = meta_screen_get_display (screen);
@@ -1160,6 +1265,9 @@ paint_windows (MetaScreen   *screen,
           /* Not damaged */
           continue;
         }
+
+      if (cw->attrs.map_state != IsViewable)
+        continue;
 
 #if 0
       if ((cw->attrs.x + cw->attrs.width < 1) ||
@@ -1216,8 +1324,15 @@ paint_windows (MetaScreen   *screen,
 
           if (cw->type == META_COMP_WINDOW_DESKTOP)
             {
-              desktop_region = XFixesCreateRegion (xdisplay, 0, 0);
-              XFixesCopyRegion (xdisplay, desktop_region, paint_region);
+              if(desktop_region)
+              {
+                XFixesUnionRegion (xdisplay, desktop_region, desktop_region, paint_region);
+              }
+              else
+              {
+                desktop_region = XFixesCreateRegion (xdisplay, 0, 0);
+                XFixesCopyRegion (xdisplay, desktop_region, paint_region);
+              }
             }
 
           XFixesSubtractRegion (xdisplay, paint_region,
@@ -1301,20 +1416,34 @@ paint_windows (MetaScreen   *screen,
         }
     }
 
+
+  XFixesSetPictureClipRegion (xdisplay, root_buffer, 0, 0, region);
+
+#ifdef HAVE_PRESENT
+  if (info->use_present)
+    info->present_pending = present_flip (screen, region, root_pixmap);
+
+  if (!info->use_present || !info->present_pending)
+#endif /* HAVE_PRESENT */
+    {
+      XRenderComposite (xdisplay, PictOpSrc, root_buffer, None,
+          info->root_picture, 0, 0, 0, 0, 0, 0,
+          screen_width, screen_height);
+    }
+
+  XFlush (xdisplay);
   XFixesDestroyRegion (xdisplay, paint_region);
 }
 
 static void
 paint_all (MetaScreen   *screen,
-           XserverRegion region)
+           XserverRegion region,
+           int           b)
 {
   MetaCompScreen *info = meta_screen_get_compositor_data (screen);
   MetaDisplay *display = meta_screen_get_display (screen);
   Display *xdisplay = meta_display_get_xdisplay (display);
   int screen_width, screen_height;
-
-  /* Set clipping to the given region */
-  XFixesSetPictureClipRegion (xdisplay, info->root_picture, 0, 0, region);
 
   meta_screen_get_size (screen, &screen_width, &screen_height);
 
@@ -1330,6 +1459,9 @@ paint_all (MetaScreen   *screen,
                                ((double) (rand () % 100)) / 100.0,
                                ((double) (rand () % 100)) / 100.0);
 
+      /* Set clipping to the given region */
+      XFixesSetPictureClipRegion (xdisplay, info->root_picture, 0, 0, region);
+
       XRenderComposite (xdisplay, PictOpOver, overlay, None, info->root_picture,
                         0, 0, 0, 0, 0, 0, screen_width, screen_height);
       XRenderFreePicture (xdisplay, overlay);
@@ -1337,15 +1469,13 @@ paint_all (MetaScreen   *screen,
       usleep (100 * 1000);
     }
 
-  if (info->root_buffer == None)
-    info->root_buffer = create_root_buffer (screen);
+  if (info->root_pixmaps[b] == None)
+    info->root_pixmaps[b] = create_root_pixmap (screen);
 
-  paint_windows (screen, info->windows, info->root_buffer, region);
+  if (info->root_buffers[b] == None)
+    info->root_buffers[b] = create_root_buffer (screen, info->root_pixmaps[b]);
 
-  XFixesSetPictureClipRegion (xdisplay, info->root_buffer, 0, 0, region);
-  XRenderComposite (xdisplay, PictOpSrc, info->root_buffer, None,
-                    info->root_picture, 0, 0, 0, 0, 0, 0,
-                    screen_width, screen_height);
+  paint_windows (screen, info->windows, info->root_buffers[b], info->root_pixmaps[b], region);
 }
 
 static void
@@ -1355,14 +1485,47 @@ repair_screen (MetaScreen *screen)
   MetaDisplay *display = meta_screen_get_display (screen);
   Display *xdisplay = meta_display_get_xdisplay (display);
 
-  if (info!=NULL && info->all_damage != None)
+  g_return_if_fail(info != NULL);
+
+  if (info->all_damage != None)
     {
-      meta_error_trap_push (display);
-      paint_all (screen, info->all_damage);
-      XFixesDestroyRegion (xdisplay, info->all_damage);
-      info->all_damage = None;
-      info->clip_changed = FALSE;
-      meta_error_trap_pop (display, FALSE);
+#ifdef HAVE_PRESENT
+      if (info->use_present)
+        {
+          if (!info->present_pending)
+            {
+              XserverRegion damage = info->all_damage;
+              meta_error_trap_push (display);
+              if (info->prev_damage)
+                {
+                  XFixesUnionRegion(xdisplay, info->prev_damage, info->prev_damage, damage);
+                  damage = info->prev_damage;
+                }
+
+              paint_all (screen, damage, info->root_current);
+
+              if (++info->root_current >= NUM_BUFFER)
+                info->root_current = 0;
+
+              if (info->prev_damage)
+                XFixesDestroyRegion (xdisplay, info->prev_damage);
+
+              info->prev_damage = info->all_damage;
+              info->all_damage = None;
+              info->clip_changed = FALSE;
+              meta_error_trap_pop (display, FALSE);
+            }
+        }
+      else
+#endif /* HAVE_PRESENT */
+        {
+          meta_error_trap_push (display);
+          paint_all (screen, info->all_damage, info->root_current);
+          XFixesDestroyRegion (xdisplay, info->all_damage);
+          info->all_damage = None;
+          info->clip_changed = FALSE;
+          meta_error_trap_pop (display, FALSE);
+        }
     }
 }
 
@@ -2143,10 +2306,18 @@ process_configure_notify (MetaCompositorXRender  *compositor,
         return;
 
       info = meta_screen_get_compositor_data (screen);
-      if (info != NULL && info->root_buffer)
+      if (info != NULL)
         {
-          XRenderFreePicture (xdisplay, info->root_buffer);
-          info->root_buffer = None;
+          int b;
+          for (b = 0; b < NUM_BUFFER; b++)
+            {
+              if (info->root_buffers[b]) {
+                XRenderFreePicture (xdisplay, info->root_buffers[b]);
+                XFreePixmap (xdisplay, info->root_pixmaps[b]);
+                info->root_buffers[b] = None;
+                info->root_pixmaps[b] = None;
+              }
+            }
         }
 
       damage_screen (screen);
@@ -2422,6 +2593,47 @@ process_shape (MetaCompositorXRender *compositor,
     }
 }
 
+#ifdef HAVE_PRESENT
+static void
+xrender_present_complete(MetaScreen *screen,
+                         XPresentCompleteNotifyEvent *ce)
+{
+  MetaCompScreen *info = meta_screen_get_compositor_data (screen);
+
+  info->present_pending = False;
+  repair_screen(screen);
+}
+#endif /* HAVE_PRESENT */
+
+static void
+process_generic(MetaCompositorXRender   *compositor,
+                XGenericEvent           *event)
+{
+  XGenericEventCookie *ge = (XGenericEventCookie *) event;
+  Display *xdisplay = meta_display_get_xdisplay (compositor->display);
+  XGetEventData(xdisplay, ge);
+
+  switch (ge->evtype)
+    {
+#ifdef HAVE_PRESENT
+    case PresentConfigureNotify:
+      break;
+    case PresentCompleteNotify:
+      {
+        if (ge->extension == compositor->present_major)
+          {
+            XPresentCompleteNotifyEvent *ce = ge->data;
+            MetaScreen *screen = find_screen_from_output(compositor->display, ce->window);
+            if (screen)
+              xrender_present_complete(screen, ce);
+          }
+      }
+      break;
+#endif /* HAVE_PRESENT */
+    }
+  XFreeEventData(xdisplay, ge);
+}
+
 static int
 timeout_debug (MetaCompositorXRender *compositor)
 {
@@ -2506,6 +2718,7 @@ xrender_manage_screen (MetaCompositor *compositor,
                        MetaScreen     *screen)
 {
 #ifdef HAVE_COMPOSITE_EXTENSIONS
+  MetaCompositorXRender *xrc = (MetaCompositorXRender *) compositor;
   MetaCompScreen *info;
   MetaDisplay *display = meta_screen_get_display (screen);
   Display *xdisplay = meta_display_get_xdisplay (display);
@@ -2513,6 +2726,7 @@ xrender_manage_screen (MetaCompositor *compositor,
   XRenderPictFormat *visual_format;
   int screen_number = meta_screen_get_screen_number (screen);
   Window xroot = meta_screen_get_xroot (screen);
+  int b;
 
   /* Check if the screen is already managed */
   if (meta_screen_get_compositor_data (screen))
@@ -2554,7 +2768,10 @@ xrender_manage_screen (MetaCompositor *compositor,
       return;
     }
 
-  info->root_buffer = None;
+  for (b = 0; b < NUM_BUFFER; b++) {
+    info->root_buffers[b] = None;
+    info->root_pixmaps[b] = None;
+  }
   info->black_picture = solid_picture (display, screen, TRUE, 1, 0, 0, 0);
 
   info->root_tile = None;
@@ -2577,6 +2794,21 @@ xrender_manage_screen (MetaCompositor *compositor,
     }
   else
     meta_verbose ("Disabling shadows\n");
+
+#ifdef HAVE_PRESENT
+  if (xrc->has_present)
+    {
+      info->present_eid = XPresentSelectInput(xdisplay, info->output,
+                                              PresentCompleteNotifyMask);
+      info->use_present = TRUE;
+      info->present_pending = FALSE;
+    }
+  else
+    {
+      info->use_present = FALSE;
+      g_warning ("XPresent not available");
+    }
+#endif /* HAVE_PRESENT */
 
   XClearArea (xdisplay, info->output, 0, 0, 0, 0, TRUE);
 
@@ -2692,38 +2924,23 @@ xrender_end_move (MetaCompositor *compositor,
 #ifdef HAVE_COMPOSITE_EXTENSIONS
 #endif
 }
-#endif /* 0 */
 
 static void
 xrender_free_window (MetaCompositor *compositor,
                      MetaWindow     *window)
 {
 #ifdef HAVE_COMPOSITE_EXTENSIONS
-  MetaCompositorXRender *xrc;
-  MetaFrame *frame;
-  Window xwindow;
+  /* FIXME: When an undecorated window is hidden this is called,
+     but the window does not get readded if it is subsequentally shown again
+     See http://bugzilla.gnome.org/show_bug.cgi?id=504876
 
-  xrc = (MetaCompositorXRender *) compositor;
-  frame = meta_window_get_frame (window);
-  xwindow = None;
-
-  if (frame)
-    {
-      xwindow = meta_frame_get_xwindow (frame);
-    }
-  else
-    {
-      /* FIXME: When an undecorated window is hidden this is called, but the
-       * window does not get readded if it is subsequentally shown again. See:
-       * http://bugzilla.gnome.org/show_bug.cgi?id=504876
-       */
-      /* xwindow = meta_window_get_xwindow (window); */
-    }
-
-  if (xwindow != None)
-    destroy_win (xrc->display, xwindow, FALSE);
+     I don't *think* theres any need for this call anyway, leaving it out
+     does not seem to cause any side effects so far, but I should check with
+     someone who understands more. */
+  /* destroy_win (compositor->display, window->xwindow, FALSE); */
 #endif
 }
+#endif /* 0 */
 
 static void
 xrender_process_event (MetaCompositor *compositor,
@@ -2774,6 +2991,10 @@ xrender_process_event (MetaCompositor *compositor,
 
     case DestroyNotify:
       process_destroy (xrc, (XDestroyWindowEvent *) event);
+      break;
+
+    case GenericEvent:
+      process_generic (xrc, (XGenericEvent *) event);
       break;
 
     default:
@@ -3023,7 +3244,6 @@ static MetaCompositor comp_info = {
   xrender_process_event,
   xrender_get_window_surface,
   xrender_set_active_window,
-  xrender_free_window,
   xrender_maximize_window,
   xrender_unmaximize_window,
 };
@@ -3082,6 +3302,9 @@ meta_compositor_xrender_new (MetaDisplay *display)
   xrc->atom_net_wm_window_type_tooltip = atoms[14];
   xrc->show_redraw = FALSE;
   xrc->debug = FALSE;
+#ifdef HAVE_PRESENT
+  xrc->has_present = XPresentQueryExtension(xdisplay, &xrc->present_major, NULL, NULL);
+#endif /* HAVE_PRESENT */
 
 #ifdef USE_IDLE_REPAINT
   meta_verbose ("Using idle repaint\n");

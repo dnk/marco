@@ -20,6 +20,7 @@
  */
 
 #include <gtk/gtk.h>
+#include <gdk/gdkx.h>
 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -118,28 +119,13 @@ evil_timeout (gpointer data)
       int t;
       GtkWidget *parent;
 
-#if GTK_CHECK_VERSION (3, 22, 0)
-      GdkWindow *window;
-      GdkMonitor *monitor;
-      GdkRectangle geometry = {0, 0, 0, 0};
-#endif
-
       w = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
-#if GTK_CHECK_VERSION (3, 22, 0)
-      window = gtk_widget_get_window (w);
-      monitor = gdk_display_get_monitor_at_window (gtk_widget_get_display (w), window);
-      gdk_monitor_get_geometry (monitor, &geometry);
-      gtk_window_move (GTK_WINDOW (w),
-                       g_random_int_range (geometry.x, geometry.x + geometry.width),
-                       g_random_int_range (geometry.y, geometry.y + geometry.height));
-#else
       gtk_window_move (GTK_WINDOW (w),
                        g_random_int_range (0,
-                                           gdk_screen_width ()),
+                                           WidthOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ()))),
                        g_random_int_range (0,
-                                           gdk_screen_height ()));
-#endif
+                                           HeightOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ()))));
 
       parent = NULL;
 

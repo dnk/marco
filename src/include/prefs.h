@@ -62,10 +62,13 @@ typedef enum
   META_PREF_COMPOSITING_MANAGER,
   META_PREF_COMPOSITING_FAST_ALT_TAB,
   META_PREF_RESIZE_WITH_RIGHT_BUTTON,
+  META_PREF_SHOW_TAB_BORDER,
   META_PREF_CENTER_NEW_WINDOWS,
-  META_PREF_SIDE_BY_SIDE_TILING,
+  META_PREF_ALLOW_TILING,
+  META_PREF_ALLOW_TOP_TILING,
   META_PREF_FORCE_FULLSCREEN,
-  META_PREF_PLACEMENT_MODE
+  META_PREF_PLACEMENT_MODE,
+  META_PREF_SHOW_DESKTOP_SKIP_LIST
 } MetaPreference;
 
 typedef void (* MetaPrefsChangedFunc) (MetaPreference pref,
@@ -96,8 +99,9 @@ int                         meta_prefs_get_auto_raise_delay   (void);
 MetaWrapStyle               meta_prefs_get_wrap_style         (void);
 gboolean                    meta_prefs_get_reduced_resources  (void);
 gboolean                    meta_prefs_get_mate_accessibility (void);
-gboolean                    meta_prefs_get_mate_animations   (void);
-gboolean                    meta_prefs_get_side_by_side_tiling (void);
+gboolean                    meta_prefs_get_mate_animations    (void);
+gboolean                    meta_prefs_get_allow_tiling       (void);
+gboolean                    meta_prefs_get_allow_top_tiling   (void);
 
 const char*                 meta_prefs_get_command            (int i);
 
@@ -127,6 +131,8 @@ gboolean    meta_prefs_get_compositing_manager (void);
 gboolean    meta_prefs_get_compositing_fast_alt_tab (void);
 gboolean    meta_prefs_get_center_new_windows  (void);
 gboolean    meta_prefs_get_force_fullscreen  (void);
+gboolean    meta_prefs_show_tab_border (void);
+gboolean    meta_prefs_is_in_skip_list (char *class);
 
 /**
  * Sets whether the compositor is turned on.
@@ -165,6 +171,10 @@ typedef enum _MetaKeyBindingAction
   META_KEYBINDING_ACTION_WORKSPACE_RIGHT,
   META_KEYBINDING_ACTION_WORKSPACE_UP,
   META_KEYBINDING_ACTION_WORKSPACE_DOWN,
+  META_KEYBINDING_ACTION_WORKSPACE_MOVE_LEFT,
+  META_KEYBINDING_ACTION_WORKSPACE_MOVE_RIGHT,
+  META_KEYBINDING_ACTION_WORKSPACE_MOVE_UP,
+  META_KEYBINDING_ACTION_WORKSPACE_MOVE_DOWN,
   META_KEYBINDING_ACTION_SWITCH_GROUP,
   META_KEYBINDING_ACTION_SWITCH_GROUP_BACKWARD,
   META_KEYBINDING_ACTION_SWITCH_WINDOWS,

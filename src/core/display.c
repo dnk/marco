@@ -1156,6 +1156,7 @@ grab_op_is_keyboard (MetaGrabOp op)
     case META_GRAB_OP_KEYBOARD_ESCAPING_DOCK:
     case META_GRAB_OP_KEYBOARD_ESCAPING_GROUP:
     case META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING:
+    case META_GRAB_OP_KEYBOARD_WORKSPACE_MOVING:
       return TRUE;
 
     default:
@@ -1437,6 +1438,8 @@ static gboolean maybe_send_event_to_gtk(MetaDisplay* display, XEvent* xevent)
 	GdkEvent* gdk_event = NULL;
 	GdkWindow* gdk_window;
 	Window window;
+	GdkSeat *seat;
+	GdkDevice *device;
 
 	switch (xevent->type)
 	{
@@ -1471,8 +1474,9 @@ static gboolean maybe_send_event_to_gtk(MetaDisplay* display, XEvent* xevent)
 	 * (client-side) subwindow for individual menu items.
 	 */
 
-	GdkDeviceManager *device_manager = gdk_display_get_device_manager (gdk_display);
-	GdkDevice *device = gdk_device_manager_get_client_pointer (device_manager);
+	gdk_display = gdk_window_get_display (gdk_window);
+	seat = gdk_display_get_default_seat (gdk_display);
+	device = gdk_seat_get_pointer (seat);
 
 	if (gdk_display_device_is_grabbed(gdk_display, device))
 	{
@@ -1779,6 +1783,20 @@ static gboolean event_callback(XEvent* event, gpointer data)
       meta_display_process_key_event (display, window, event);
       break;
     case ButtonPress:
+      /* Use window under pointer when processing synthetic events from another client */
+      if (window == NULL && event->xbutton.send_event)
+        {
+          int x, y, root_x, root_y;
+          Window root, child;
+          guint mask;
+          XQueryPointer (display->xdisplay,
+                         event->xany.window,
+                         &root, &child,
+                         &root_x, &root_y,
+                         &x, &y,
+                         &mask);
+          window = meta_display_lookup_x_window (display, child);
+        }
       if ((window &&
            grab_op_is_mouse (display->grab_op) &&
            display->grab_button != (int) event->xbutton.button &&
@@ -3710,6 +3728,7 @@ meta_display_begin_grab_op (MetaDisplay *display,
                                     META_TAB_SHOW_INSTANTLY);
 
     case META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING:
+    case META_GRAB_OP_KEYBOARD_WORKSPACE_MOVING:
       meta_screen_ensure_workspace_popup (screen);
       break;
 
@@ -3759,7 +3778,8 @@ meta_display_end_grab_op (MetaDisplay *display,
     }
 
   if (GRAB_OP_IS_WINDOW_SWITCH (display->grab_op) ||
-      display->grab_op == META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING)
+      display->grab_op == META_GRAB_OP_KEYBOARD_WORKSPACE_SWITCHING ||
+      display->grab_op == META_GRAB_OP_KEYBOARD_WORKSPACE_MOVING)
     {
       meta_ui_tab_popup_free (display->grab_screen->tab_popup);
       display->grab_screen->tab_popup = NULL;

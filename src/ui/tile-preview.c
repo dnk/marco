@@ -66,7 +66,11 @@ meta_tile_preview_draw (GtkWidget *widget,
     }
   else
     {
+      GdkRGBA black = {.0, .0, .0, 1.0};
       GdkRGBA white = {1.0, 1.0, 1.0, 1.0};
+
+      gdk_cairo_set_source_rgba (cr, &black);
+      cairo_paint (cr);
 
       gdk_cairo_set_source_rgba (cr, &white);
 
@@ -120,12 +124,12 @@ on_preview_window_style_set (GtkWidget *widget,
 }
 
 MetaTilePreview *
-meta_tile_preview_new (int      screen_number)
+meta_tile_preview_new (void)
 {
   MetaTilePreview *preview;
   GdkScreen *screen;
 
-  screen = gdk_display_get_screen (gdk_display_get_default (), screen_number);
+  screen = gdk_display_get_default_screen (gdk_display_get_default ());
 
   preview = g_new (MetaTilePreview, 1);
 
@@ -207,9 +211,6 @@ meta_tile_preview_show (MetaTilePreview *preview,
     {
       cairo_rectangle_int_t outer_rect, inner_rect;
       cairo_region_t *outer_region, *inner_region;
-      GdkRGBA black = {.0, .0, .0, 1.0};
-
-      gdk_window_set_background_rgba (window, &black);
 
       outer_rect.x = outer_rect.y = 0;
       outer_rect.width = preview->tile_rect.width;

@@ -111,6 +111,15 @@ keybind (switch-to-workspace-up, handle_switch_to_workspace,
 keybind (switch-to-workspace-down, handle_switch_to_workspace,
          META_MOTION_DOWN, 0)
 
+keybind (move-to-workspace-left, handle_move_to_workspace,
+         META_MOTION_LEFT, BINDING_PER_WINDOW)
+keybind (move-to-workspace-right, handle_move_to_workspace,
+         META_MOTION_RIGHT, BINDING_PER_WINDOW)
+keybind (move-to-workspace-up, handle_move_to_workspace,
+         META_MOTION_UP, BINDING_PER_WINDOW)
+keybind (move-to-workspace-down, handle_move_to_workspace,
+         META_MOTION_DOWN, BINDING_PER_WINDOW)
+
 /***********************************/
 
 /* The ones which have inverses.  These can't be bound to any keystroke
@@ -187,6 +196,7 @@ keybind (run-command-screenshot, handle_run_command, 32, 0)
 keybind (run-command-window-screenshot, handle_run_command, 33, 0)
 
 keybind (run-command-terminal, handle_run_terminal, 0, 0)
+keybind (rename-workspace, handle_rename_workspace, 0, 0)
 
 /* No description because this is undocumented */
 keybind (set-spew-mark, handle_set_spew_mark, 0, 0)
@@ -233,15 +243,6 @@ keybind (move-to-workspace-12, handle_move_to_workspace, 11, BINDING_PER_WINDOW)
  * workspace.h, of course.
  */
 
-keybind (move-to-workspace-left, handle_move_to_workspace,
-         META_MOTION_LEFT, BINDING_PER_WINDOW)
-keybind (move-to-workspace-right, handle_move_to_workspace,
-         META_MOTION_RIGHT, BINDING_PER_WINDOW)
-keybind (move-to-workspace-up, handle_move_to_workspace,
-         META_MOTION_UP, BINDING_PER_WINDOW)
-keybind (move-to-workspace-down, handle_move_to_workspace,
-         META_MOTION_DOWN, BINDING_PER_WINDOW)
-
 keybind (raise-or-lower, handle_raise_or_lower, 0, BINDING_PER_WINDOW)
 keybind (raise, handle_raise, 0, BINDING_PER_WINDOW)
 keybind (lower, handle_lower, 0, BINDING_PER_WINDOW)
@@ -257,6 +258,18 @@ keybind (tile-to-side-e, handle_toggle_tiled, META_TILE_RIGHT,
 keybind (tile-to-side-w, handle_toggle_tiled, META_TILE_LEFT,
         BINDING_PER_WINDOW)
 
+keybind (tile-to-corner-nw, handle_toggle_tiled, META_TILE_TOP_LEFT,
+         BINDING_PER_WINDOW)
+
+keybind (tile-to-corner-ne, handle_toggle_tiled, META_TILE_TOP_RIGHT,
+         BINDING_PER_WINDOW)
+
+keybind (tile-to-corner-se, handle_toggle_tiled, META_TILE_BOTTOM_RIGHT,
+         BINDING_PER_WINDOW)
+
+keybind (tile-to-corner-sw, handle_toggle_tiled, META_TILE_BOTTOM_LEFT,
+         BINDING_PER_WINDOW)
+
 keybind (move-to-corner-nw, handle_move_to_corner_nw, 0,
         BINDING_PER_WINDOW)
 keybind (move-to-corner-ne, handle_move_to_corner_ne, 0,
@@ -265,6 +278,7 @@ keybind (move-to-corner-sw, handle_move_to_corner_sw, 0,
         BINDING_PER_WINDOW)
 keybind (move-to-corner-se, handle_move_to_corner_se, 0,
         BINDING_PER_WINDOW)
+
 
 keybind (move-to-side-n, handle_move_to_side_n, 0,
         BINDING_PER_WINDOW)
@@ -276,6 +290,19 @@ keybind (move-to-side-w, handle_move_to_side_w, 0,
         BINDING_PER_WINDOW)
 keybind (move-to-center, handle_move_to_center, 0,
         BINDING_PER_WINDOW)
+
+keybind (move-to-monitor-n, handle_move_to_monitor, META_SCREEN_UP,
+        BINDING_PER_WINDOW)
+keybind (move-to-monitor-s, handle_move_to_monitor, META_SCREEN_DOWN,
+        BINDING_PER_WINDOW)
+keybind (move-to-monitor-e, handle_move_to_monitor, META_SCREEN_RIGHT,
+        BINDING_PER_WINDOW)
+keybind (move-to-monitor-w, handle_move_to_monitor, META_SCREEN_LEFT,
+        BINDING_PER_WINDOW)
+
+
+
+
 
 keybind (switch-to-workspace-prev, handle_switch_to_workspace,
          META_MOTION_PREV, 0)

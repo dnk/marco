@@ -117,9 +117,12 @@ static gboolean force_compositor_manager = FALSE;
 static gboolean compositing_manager = FALSE;
 static gboolean compositing_fast_alt_tab = FALSE;
 static gboolean resize_with_right_button = FALSE;
+static gboolean show_tab_border = FALSE;
 static gboolean center_new_windows = FALSE;
 static gboolean force_fullscreen = TRUE;
-static gboolean side_by_side_tiling = FALSE;
+static gboolean allow_tiling = FALSE;
+static gboolean allow_top_tiling = TRUE;
+static GList *show_desktop_skip_list = NULL;
 
 static MetaVisualBellType visual_bell_type = META_VISUAL_BELL_FULLSCREEN_FLASH;
 static MetaButtonLayout button_layout;
@@ -158,6 +161,7 @@ static void titlebar_handler (MetaPreference, const gchar*, gboolean*);
 static void theme_name_handler (MetaPreference, const gchar*, gboolean*);
 static void mouse_button_mods_handler (MetaPreference, const gchar*, gboolean*);
 static void button_layout_handler (MetaPreference, const gchar*, gboolean*);
+static void show_desktop_skip_list_handler (MetaPreference, const gchar*, gboolean*);
 
 static gboolean update_binding            (MetaKeyPref *binding,
                                            gchar  *value);
@@ -407,16 +411,28 @@ static MetaBoolPreference preferences_bool[] =
       &resize_with_right_button,
       FALSE,
     },
+    { "show-tab-border",
+      KEY_GENERAL_SCHEMA,
+      META_PREF_SHOW_TAB_BORDER,
+      &show_tab_border,
+      FALSE,
+    },
     { "center-new-windows",
       KEY_GENERAL_SCHEMA,
       META_PREF_CENTER_NEW_WINDOWS,
       &center_new_windows,
       FALSE,
     },
-    { "side-by-side-tiling",
+    { "allow-tiling",
       KEY_GENERAL_SCHEMA,
-      META_PREF_SIDE_BY_SIDE_TILING,
-      &side_by_side_tiling,
+      META_PREF_ALLOW_TILING,
+      &allow_tiling,
+      FALSE,
+    },
+    { "allow-top-tiling",
+      KEY_GENERAL_SCHEMA,
+      META_PREF_ALLOW_TOP_TILING,
+      &allow_top_tiling,
       FALSE,
     },
     { NULL, NULL, 0, NULL, FALSE },
@@ -459,6 +475,12 @@ static MetaStringPreference preferences_string[] =
       META_PREF_CURSOR_THEME,
       NULL,
       &cursor_theme,
+    },
+    { "show-desktop-skip-list",
+      KEY_GENERAL_SCHEMA,
+      META_PREF_SHOW_DESKTOP_SKIP_LIST,
+      &show_desktop_skip_list_handler,
+      NULL,
     },
     { NULL, NULL, 0, NULL, NULL },
   };
@@ -1078,6 +1100,18 @@ meta_prefs_get_cursor_size (void)
   return cursor_size;
 }
 
+gboolean
+meta_prefs_is_in_skip_list (char *class)
+{
+  GList *item;
+    
+  for (item = show_desktop_skip_list; item; item = item->next)
+    {
+      if (!g_ascii_strcasecmp (class, item->data))
+        return TRUE;
+    }
+  return FALSE;
+}
 
 /****************************************************************************/
 /* Handlers for string preferences.                                         */
@@ -1163,6 +1197,33 @@ mouse_button_mods_handler (MetaPreference pref,
 
       *inform_listeners = FALSE;
     }
+}
+
+static void
+show_desktop_skip_list_handler (MetaPreference pref,
+                                const gchar *string_value,
+                                gboolean *inform_listeners)
+{
+  gchar **tokens;
+  gchar **tok;
+  GList *item;
+
+  if (show_desktop_skip_list)
+    {
+      for (item = show_desktop_skip_list; item; item = item->next)
+        g_free (item->data);
+      g_list_free (show_desktop_skip_list);
+      show_desktop_skip_list = NULL;
+    }
+
+  if (!(tokens = g_strsplit (string_value, ",", -1)))
+    return;
+  for (tok = tokens; tok && *tok; tok++)
+    {
+      gchar *stripped = g_strstrip (g_strdup (*tok));
+      show_desktop_skip_list = g_list_prepend (show_desktop_skip_list, stripped);
+    }
+  g_strfreev (tokens);
 }
 
 static gboolean
@@ -1558,14 +1619,23 @@ meta_preference_to_string (MetaPreference pref)
     case META_PREF_RESIZE_WITH_RIGHT_BUTTON:
       return "RESIZE_WITH_RIGHT_BUTTON";
 
+    case META_PREF_SHOW_TAB_BORDER:
+      return "SHOW_TAB_BORDER";
+
     case META_PREF_FORCE_FULLSCREEN:
       return "FORCE_FULLSCREEN";
 
-    case META_PREF_SIDE_BY_SIDE_TILING:
-      return "SIDE_BY_SIDE_TILING";
+    case META_PREF_ALLOW_TILING:
+      return "ALLOW_TILING";
+
+    case META_PREF_ALLOW_TOP_TILING:
+      return "ALLOW_TOP_TILING";
 
     case META_PREF_PLACEMENT_MODE:
       return "PLACEMENT_MODE";
+
+    case META_PREF_SHOW_DESKTOP_SKIP_LIST:
+      return "SHOW_DESKTOP_SKIP_LIST";
     }
 
   return "(unknown)";
@@ -2228,9 +2298,15 @@ meta_prefs_get_center_new_windows (void)
 }
 
 gboolean
-meta_prefs_get_side_by_side_tiling ()
+meta_prefs_get_allow_tiling ()
 {
-  return side_by_side_tiling;
+  return allow_tiling;
+}
+
+gboolean
+meta_prefs_get_allow_top_tiling ()
+{
+  return allow_top_tiling;
 }
 
 guint
@@ -2243,6 +2319,12 @@ guint
 meta_prefs_get_mouse_button_menu (void)
 {
   return resize_with_right_button ? 2: 3;
+}
+
+gboolean
+meta_prefs_show_tab_border(void)
+{
+    return show_tab_border;
 }
 
 gboolean

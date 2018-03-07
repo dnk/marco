@@ -103,6 +103,7 @@ set_supported_hint (MetaScreen *screen)
 #undef item
 #undef EWMH_ATOMS_ONLY
     screen->display->atom__GTK_FRAME_EXTENTS,
+    screen->display->atom__GTK_SHOW_WINDOW_MENU,
   };
 
   XChangeProperty (screen->display->xdisplay, screen->xroot,
@@ -1273,6 +1274,7 @@ meta_screen_ensure_tab_popup (MetaScreen      *screen,
   GList *tmp;
   int len;
   int i;
+  gint border;
 
   if (screen->tab_popup)
     return;
@@ -1289,6 +1291,8 @@ meta_screen_ensure_tab_popup (MetaScreen      *screen,
   entries[len].title = NULL;
   entries[len].icon = NULL;
 
+  border = meta_prefs_show_tab_border() ? BORDER_OUTLINE_TAB |
+    BORDER_OUTLINE_WINDOW : BORDER_OUTLINE_TAB;
   i = 0;
   tmp = tab_list;
   while (i < len)
@@ -1353,48 +1357,52 @@ meta_screen_ensure_tab_popup (MetaScreen      *screen,
        * sides.  On the top it should be the size of the south frame
        * edge.
        */
-#define OUTLINE_WIDTH 5
-      /* Top side */
-      if (!entries[i].hidden &&
-          window->frame && window->frame->bottom_height > 0 &&
-          window->frame->child_y >= window->frame->bottom_height)
-        entries[i].inner_rect.y = window->frame->bottom_height;
-      else
-        entries[i].inner_rect.y = OUTLINE_WIDTH;
+       if (border & BORDER_OUTLINE_WINDOW)
+         {
+           const gint border_outline_width = 5;
 
-      /* Bottom side */
-      if (!entries[i].hidden &&
-          window->frame && window->frame->bottom_height != 0)
-        entries[i].inner_rect.height = r.height
-          - entries[i].inner_rect.y - window->frame->bottom_height;
-      else
-        entries[i].inner_rect.height = r.height
-          - entries[i].inner_rect.y - OUTLINE_WIDTH;
+           /* Top side */
+           if (!entries[i].hidden &&
+                window->frame && window->frame->bottom_height > 0 &&
+                window->frame->child_y >= window->frame->bottom_height)
+             entries[i].inner_rect.y = window->frame->bottom_height;
+           else
+              entries[i].inner_rect.y = border_outline_width;
 
-      /* Left side */
-      if (!entries[i].hidden && window->frame && window->frame->child_x != 0)
-        entries[i].inner_rect.x = window->frame->child_x;
-      else
-        entries[i].inner_rect.x = OUTLINE_WIDTH;
+            /* Bottom side */
+            if (!entries[i].hidden &&
+                window->frame && window->frame->bottom_height != 0)
+              entries[i].inner_rect.height = r.height
+                - entries[i].inner_rect.y - window->frame->bottom_height;
+            else
+              entries[i].inner_rect.height = r.height
+                - entries[i].inner_rect.y - border_outline_width;
 
-      /* Right side */
-      if (!entries[i].hidden &&
-          window->frame && window->frame->right_width != 0)
-        entries[i].inner_rect.width = r.width
-          - entries[i].inner_rect.x - window->frame->right_width;
-      else
-        entries[i].inner_rect.width = r.width
-          - entries[i].inner_rect.x - OUTLINE_WIDTH;
+            /* Left side */
+            if (!entries[i].hidden && window->frame && window->frame->child_x != 0)
+                entries[i].inner_rect.x = window->frame->child_x;
+            else
+                entries[i].inner_rect.x = border_outline_width;
+
+            /* Right side */
+            if (!entries[i].hidden &&
+                    window->frame && window->frame->right_width != 0)
+              entries[i].inner_rect.width = r.width
+                - entries[i].inner_rect.x - window->frame->right_width;
+            else
+              entries[i].inner_rect.width = r.width
+                - entries[i].inner_rect.x - border_outline_width;
+        }
+
 
       ++i;
       tmp = tmp->next;
     }
 
   screen->tab_popup = meta_ui_tab_popup_new (entries,
-                                             screen->number,
                                              len,
                                              5, /* FIXME */
-                                             TRUE);
+                                             border);
 
   for (i = 0; i < len; i++)
     g_object_unref (entries[i].icon);
@@ -1463,10 +1471,9 @@ meta_screen_ensure_workspace_popup (MetaScreen *screen)
     }
 
   screen->tab_popup = meta_ui_tab_popup_new (entries,
-                                             screen->number,
                                              len,
                                              layout.cols,
-                                             FALSE);
+                                             BORDER_OUTLINE_WORKSPACE);
 
   g_free (entries);
   meta_screen_free_workspace_layout (&layout);
@@ -1484,26 +1491,26 @@ meta_screen_tile_preview_update_timeout (gpointer data)
   screen->tile_preview_timeout_id = 0;
 
   if (!screen->tile_preview)
-    screen->tile_preview = meta_tile_preview_new (screen->number);
+    screen->tile_preview = meta_tile_preview_new ();
 
   if (window)
     {
       switch (window->tile_mode)
-        {
-          case META_TILE_LEFT:
-          case META_TILE_RIGHT:
-              if (!META_WINDOW_TILED (window))
-                needs_preview = TRUE;
-              break;
+        {     
+        case META_TILE_MAXIMIZED:
+          if (!META_WINDOW_MAXIMIZED (window))
+            needs_preview = TRUE;
+          break;
+              
+        case META_TILE_NONE:
+          needs_preview = FALSE;
+          break;
 
-          case META_TILE_MAXIMIZED:
-              if (!META_WINDOW_MAXIMIZED (window))
-                needs_preview = TRUE;
-              break;
+        default:
+          if (!META_WINDOW_SIDE_TILED (window))
+            needs_preview = TRUE;
+          break;
 
-          default:
-              needs_preview = FALSE;
-              break;
         }
     }
 
@@ -2439,7 +2446,7 @@ queue_windows_showing (MetaScreen *screen)
     {
       MetaWindow *w = tmp->data;
 
-      if (w->screen == screen)
+      if (w->screen == screen && !meta_prefs_is_in_skip_list (w->res_class))
         meta_window_queue (w, META_QUEUE_CALC_SHOWING);
 
       tmp = tmp->next;
@@ -2493,7 +2500,8 @@ meta_screen_show_desktop (MetaScreen *screen,
       MetaWindow *w = windows->data;
 
       if (w->screen == screen  &&
-          w->type == META_WINDOW_DESKTOP)
+          w->type == META_WINDOW_DESKTOP &&
+          !meta_prefs_is_in_skip_list (w->res_class))
         {
           meta_window_focus (w, timestamp);
           break;

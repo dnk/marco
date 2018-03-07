@@ -21,6 +21,7 @@
  * 02110-1301, USA.
  */
 
+#include <gdk/gdkx.h>
 #include <config.h>
 #include <stdio.h>
 #include <string.h>
@@ -117,8 +118,8 @@ static void popup_position_func(GtkMenu* menu, gint* x, gint* y, gboolean* push_
 	}
 
 	/* Ensure onscreen */
-	*x = CLAMP (*x, 0, MAX(0, gdk_screen_width() - req.width));
-	*y = CLAMP (*y, 0, MAX(0, gdk_screen_height() - req.height));
+	*x = CLAMP (*x, 0, MAX(0, WidthOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ())) - req.width));
+	*y = CLAMP (*y, 0, MAX(0, HeightOfScreen (gdk_x11_screen_get_xscreen (gdk_screen_get_default ())) - req.height));
 }
 
 static void menu_closed(GtkMenu* widget, gpointer data)
