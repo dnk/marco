@@ -96,6 +96,7 @@ static MetaVirtualModifier mouse_button_mods = Mod1Mask;
 static MetaFocusMode focus_mode = META_FOCUS_MODE_CLICK;
 static MetaFocusNewWindows focus_new_windows = META_FOCUS_NEW_WINDOWS_SMART;
 static gboolean raise_on_click = TRUE;
+static gboolean attach_modal_dialogs = FALSE;
 static char* current_theme = NULL;
 static int num_workspaces = 4;
 static MetaWrapStyle wrap_style = META_WRAP_NONE;
@@ -1075,6 +1076,12 @@ meta_prefs_get_focus_new_windows (void)
 }
 
 gboolean
+meta_prefs_get_attach_modal_dialogs (void)
+{
+  return attach_modal_dialogs;
+}
+
+gboolean
 meta_prefs_get_raise_on_click (void)
 {
   /* Force raise_on_click on for click-to-focus, as requested by Havoc
@@ -1260,6 +1267,8 @@ button_function_from_string (const char *str)
 
   if (strcmp (str, "menu") == 0)
     return META_BUTTON_FUNCTION_MENU;
+  else if (strcmp (str, "appmenu") == 0)
+    return META_BUTTON_FUNCTION_APPMENU;
   else if (strcmp (str, "minimize") == 0)
     return META_BUTTON_FUNCTION_MINIMIZE;
   else if (strcmp (str, "maximize") == 0)
@@ -1535,6 +1544,9 @@ meta_preference_to_string (MetaPreference pref)
 
     case META_PREF_FOCUS_NEW_WINDOWS:
       return "FOCUS_NEW_WINDOWS";
+
+    case META_PREF_ATTACH_MODAL_DIALOGS:
+      return "ATTACH_MODAL_DIALOGS";
 
     case META_PREF_RAISE_ON_CLICK:
       return "RAISE_ON_CLICK";

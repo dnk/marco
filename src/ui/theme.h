@@ -92,6 +92,9 @@ struct _MetaFrameLayout
   /** Size of bottom side */
   int bottom_height;
 
+  /** Invisible border */
+  GtkBorder invisible_border;
+
   /** Border of blue title region
    * \bug (blue?!)
    **/
@@ -185,13 +188,14 @@ struct _MetaFrameGeometry
 
   /* used for a memset hack */
 #define ADDRESS_OF_BUTTON_RECTS(fgeom) (((char*)(fgeom)) + G_STRUCT_OFFSET (MetaFrameGeometry, close_rect))
-#define LENGTH_OF_BUTTON_RECTS (G_STRUCT_OFFSET (MetaFrameGeometry, right_right_background) + sizeof (GdkRectangle) - G_STRUCT_OFFSET (MetaFrameGeometry, close_rect))
+#define LENGTH_OF_BUTTON_RECTS (G_STRUCT_OFFSET (MetaFrameGeometry, right_single_background) + sizeof (GdkRectangle) - G_STRUCT_OFFSET (MetaFrameGeometry, close_rect))
 
   /* The button rects (if changed adjust memset hack) */
   MetaButtonSpace close_rect;
   MetaButtonSpace max_rect;
   MetaButtonSpace min_rect;
   MetaButtonSpace menu_rect;
+  MetaButtonSpace appmenu_rect;
   MetaButtonSpace shade_rect;
   MetaButtonSpace above_rect;
   MetaButtonSpace stick_rect;
@@ -200,14 +204,14 @@ struct _MetaFrameGeometry
   MetaButtonSpace unstick_rect;
 
 #define MAX_MIDDLE_BACKGROUNDS (MAX_BUTTONS_PER_CORNER - 2)
-  GdkRectangle left_single_background;
   GdkRectangle left_left_background;
   GdkRectangle left_middle_backgrounds[MAX_MIDDLE_BACKGROUNDS];
   GdkRectangle left_right_background;
-  GdkRectangle right_single_background;
+  GdkRectangle left_single_background;
   GdkRectangle right_left_background;
   GdkRectangle right_middle_backgrounds[MAX_MIDDLE_BACKGROUNDS];
   GdkRectangle right_right_background;
+  GdkRectangle right_single_background;
   /* End of button rects (if changed adjust memset hack) */
 
   /* Saved button layout */
@@ -232,6 +236,7 @@ typedef enum
 {
   META_COLOR_SPEC_BASIC,
   META_COLOR_SPEC_GTK,
+  META_COLOR_SPEC_GTK_CUSTOM,
   META_COLOR_SPEC_BLEND,
   META_COLOR_SPEC_SHADE
 } MetaColorSpecType;
@@ -261,6 +266,10 @@ struct _MetaColorSpec
       MetaGtkColorComponent component;
       GtkStateFlags state;
     } gtk;
+    struct {
+      char *color_name;
+      MetaColorSpec *fallback;
+    } gtkcustom;
     struct {
       MetaColorSpec *foreground;
       MetaColorSpec *background;
@@ -539,6 +548,7 @@ struct _MetaDrawOp
       MetaColorSpec *color_spec;
       MetaDrawSpec *x;
       MetaDrawSpec *y;
+      MetaDrawSpec *ellipsize_width;
     } title;
 
     struct {
@@ -594,13 +604,16 @@ typedef enum
   META_BUTTON_TYPE_LEFT_LEFT_BACKGROUND,
   META_BUTTON_TYPE_LEFT_MIDDLE_BACKGROUND,
   META_BUTTON_TYPE_LEFT_RIGHT_BACKGROUND,
+  META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND,
   META_BUTTON_TYPE_RIGHT_LEFT_BACKGROUND,
   META_BUTTON_TYPE_RIGHT_MIDDLE_BACKGROUND,
   META_BUTTON_TYPE_RIGHT_RIGHT_BACKGROUND,
+  META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND,
   META_BUTTON_TYPE_CLOSE,
   META_BUTTON_TYPE_MAXIMIZE,
   META_BUTTON_TYPE_MINIMIZE,
   META_BUTTON_TYPE_MENU,
+  META_BUTTON_TYPE_APPMENU,
   META_BUTTON_TYPE_SHADE,
   META_BUTTON_TYPE_ABOVE,
   META_BUTTON_TYPE_STICK,
@@ -830,6 +843,8 @@ struct _MetaTheme
   GQuark quark_icon_height;
   GQuark quark_title_width;
   GQuark quark_title_height;
+  GQuark quark_frame_x_center;
+  GQuark quark_frame_y_center;
 };
 
 struct _MetaPositionExprEnv
@@ -845,6 +860,8 @@ struct _MetaPositionExprEnv
   int bottom_height;
   int title_width;
   int title_height;
+  int frame_x_center;
+  int frame_y_center;
   int mini_icon_width;
   int mini_icon_height;
   int icon_width;

@@ -219,6 +219,11 @@ meta_frame_layout_new  (void)
   layout->right_width = -1;
   layout->bottom_height = -1;
 
+  layout->invisible_border.left = 10;
+  layout->invisible_border.right = 10;
+  layout->invisible_border.bottom = 10;
+  layout->invisible_border.top = 10;
+
   init_border (&layout->title_border);
 
   layout->title_vertical_pad = -1;
@@ -468,6 +473,8 @@ map_button_function_to_type (MetaButtonFunction  function)
       return META_BUTTON_TYPE_UNSTICK;
     case META_BUTTON_FUNCTION_MENU:
       return META_BUTTON_TYPE_MENU;
+    case META_BUTTON_FUNCTION_APPMENU:
+      return META_BUTTON_TYPE_APPMENU;
     case META_BUTTON_FUNCTION_MINIMIZE:
       return META_BUTTON_TYPE_MINIMIZE;
     case META_BUTTON_FUNCTION_MAXIMIZE:
@@ -534,6 +541,11 @@ rect_for_function (MetaFrameGeometry *fgeom,
     case META_BUTTON_FUNCTION_MENU:
       if (flags & META_FRAME_ALLOWS_MENU)
         return &fgeom->menu_rect;
+      else
+        return NULL;
+    case META_BUTTON_FUNCTION_APPMENU:
+      if (flags & META_FRAME_ALLOWS_APPMENU)
+        return &fgeom->appmenu_rect;
       else
         return NULL;
     case META_BUTTON_FUNCTION_MINIMIZE:
@@ -731,14 +743,10 @@ meta_frame_layout_calc_geometry (const MetaFrameLayout  *layout,
 
   for (i = 0; i < n_left; i++)
     {
-      if (i == 0) /* For the first button (From left to right) */
-        {
-          if (n_left > 1) /* Set left_left_background
-                             if we have more than one button */
-            left_bg_rects[i] = &fgeom->left_left_background;
-          else /* No background if we have only one single button */
-            left_bg_rects[i] = &fgeom->left_single_background;
-        }
+      if (n_left == 1)
+        left_bg_rects[i] = &fgeom->left_single_background;
+      else if (i == 0)
+        left_bg_rects[i] = &fgeom->left_left_background;
       else if (i == (n_left - 1))
         left_bg_rects[i] = &fgeom->left_right_background;
       else
@@ -747,14 +755,10 @@ meta_frame_layout_calc_geometry (const MetaFrameLayout  *layout,
 
   for (i = 0; i < n_right; i++)
     {
-      if (i == (n_right - 1)) /* For the first button (From right to left) */
-        {
-          if (n_right > 1) /* Set right_right_background
-                              if we have more than one button */
-            right_bg_rects[i] = &fgeom->right_right_background;
-          else /* No background if we have only one single button */
-            right_bg_rects[i] = &fgeom->right_single_background;
-        }
+      if (n_right == 1)
+        right_bg_rects[i] = &fgeom->right_single_background;
+      else if (i == (n_right - 1))
+        right_bg_rects[i] = &fgeom->right_right_background;
       else if (i == 0)
         right_bg_rects[i] = &fgeom->right_left_background;
       else
@@ -841,6 +845,12 @@ meta_frame_layout_calc_geometry (const MetaFrameLayout  *layout,
         continue;
       else if (strip_button (left_func_rects, left_bg_rects,
                              &n_left, &fgeom->menu_rect))
+        continue;
+      else if (strip_button (right_func_rects, right_bg_rects,
+                             &n_right, &fgeom->appmenu_rect))
+        continue;
+      else if (strip_button (left_func_rects, left_bg_rects,
+                             &n_left, &fgeom->appmenu_rect))
         continue;
       else
         {
@@ -1104,6 +1114,10 @@ meta_color_spec_new (MetaColorSpecType type)
       size += sizeof (dummy.data.gtk);
       break;
 
+    case META_COLOR_SPEC_GTK_CUSTOM:
+      size += sizeof (dummy.data.gtkcustom);
+      break;
+
     case META_COLOR_SPEC_BLEND:
       size += sizeof (dummy.data.blend);
       break;
@@ -1135,6 +1149,14 @@ meta_color_spec_free (MetaColorSpec *spec)
       DEBUG_FILL_STRUCT (&spec->data.gtk);
       break;
 
+    case META_COLOR_SPEC_GTK_CUSTOM:
+      if (spec->data.gtkcustom.color_name)
+        g_free (spec->data.gtkcustom.color_name);
+      if (spec->data.gtkcustom.fallback)
+        meta_color_spec_free (spec->data.gtkcustom.fallback);
+      DEBUG_FILL_STRUCT (&spec->data.gtkcustom);
+      break;
+
     case META_COLOR_SPEC_BLEND:
       if (spec->data.blend.foreground)
         meta_color_spec_free (spec->data.blend.foreground);
@@ -1160,8 +1182,82 @@ meta_color_spec_new_from_string (const char *str,
   MetaColorSpec *spec;
 
   spec = NULL;
+  
+  if (strncmp (str, "gtk:custom", 10) == 0)
+    {
+      const char *color_name_start, *fallback_str_start, *end;
+      char *color_name;
+      MetaColorSpec *fallback = NULL;
+      static gboolean debug, debug_set = FALSE;
 
-  if (str[0] == 'g' && str[1] == 't' && str[2] == 'k' && str[3] == ':')
+      if (!debug_set)
+        {
+          debug = g_getenv ("MARCO_DISABLE_FALLBACK_COLOR") != NULL;
+          debug_set = TRUE;
+        }
+
+      if (str[10] != '(')
+        {
+          g_set_error (err, META_THEME_ERROR,
+                       META_THEME_ERROR_FAILED,
+                       _("GTK custom color specification must have color name and fallback in parentheses, e.g. gtk:custom(foo,bar); could not parse \"%s\""),
+                       str);
+          return NULL;
+        }
+
+      color_name_start = str + 11;
+
+      fallback_str_start = color_name_start;
+      while (*fallback_str_start && *fallback_str_start != ',')
+        {
+          if (!(g_ascii_isalnum (*fallback_str_start)
+                || *fallback_str_start == '-'
+                || *fallback_str_start == '_'))
+            {
+              g_set_error (err, META_THEME_ERROR,
+                           META_THEME_ERROR_FAILED,
+                           _("Invalid character '%c' in color_name parameter of gtk:custom, only A-Za-z0-9-_ are valid"),
+                           *fallback_str_start);
+              return NULL;
+            }
+          fallback_str_start++;
+        }
+      fallback_str_start++;
+
+      end = strrchr (str, ')');
+
+      if (color_name_start == NULL || fallback_str_start == NULL || end == NULL)
+        {
+          g_set_error (err, META_THEME_ERROR,
+                       META_THEME_ERROR_FAILED,
+                       _("Gtk:custom format is \"gtk:custom(color_name,fallback)\", \"%s\" does not fit the format"),
+                       str);
+          return NULL;
+        }
+
+      if (!debug)
+        {
+          char *fallback_str;
+          fallback_str = g_strndup (fallback_str_start,
+                                    end - fallback_str_start);
+          fallback = meta_color_spec_new_from_string (fallback_str, err);
+          g_free (fallback_str);
+        }
+      else
+        {
+          fallback = meta_color_spec_new_from_string ("pink", err);
+        }
+
+      if (fallback == NULL)
+        return NULL;
+
+      color_name = g_strndup (color_name_start, fallback_str_start - color_name_start - 1);
+
+      spec = meta_color_spec_new (META_COLOR_SPEC_GTK_CUSTOM);
+      spec->data.gtkcustom.color_name = color_name;
+      spec->data.gtkcustom.fallback = fallback;
+    }
+  else if (strncmp (str, "gtk:", 4) == 0)
     {
       /* GTK color */
       const char *bracket;
@@ -1228,8 +1324,7 @@ meta_color_spec_new_from_string (const char *str,
       spec->data.gtk.component = component;
       g_assert (spec->data.gtk.component < META_GTK_COLOR_LAST);
     }
-  else if (str[0] == 'b' && str[1] == 'l' && str[2] == 'e' && str[3] == 'n' &&
-           str[4] == 'd' && str[5] == '/')
+  else if (strncmp (str, "blend/", 6) == 0)
     {
       /* blend */
       char **split;
@@ -1297,8 +1392,7 @@ meta_color_spec_new_from_string (const char *str,
       spec->data.blend.background = bg;
       spec->data.blend.foreground = fg;
     }
-  else if (str[0] == 's' && str[1] == 'h' && str[2] == 'a' && str[3] == 'd' &&
-           str[4] == 'e' && str[5] == '/')
+  else if (strncmp (str, "shade/", 6) == 0)
     {
       /* shade */
       char **split;
@@ -1505,6 +1599,16 @@ meta_set_color_from_style (GdkRGBA               *color,
     }
 }
 
+static void
+meta_set_custom_color_from_style (GdkRGBA         *color,
+                                  GtkStyleContext *context,
+                                  char            *color_name,
+                                  MetaColorSpec   *fallback)
+{
+  if (!gtk_style_context_lookup_color (context, color_name, color))
+    meta_color_spec_render (fallback, context, color);
+}
+
 void
 meta_color_spec_render (MetaColorSpec *spec,
                         GtkStyleContext *style,
@@ -1525,6 +1629,13 @@ meta_color_spec_render (MetaColorSpec *spec,
                                  style,
                                  spec->data.gtk.state,
                                  spec->data.gtk.component);
+      break;
+
+    case META_COLOR_SPEC_GTK_CUSTOM:
+      meta_set_custom_color_from_style (color,
+                                        style,
+                                        spec->data.gtkcustom.color_name,
+                                        spec->data.gtkcustom.fallback);
       break;
 
     case META_COLOR_SPEC_BLEND:
@@ -1620,20 +1731,12 @@ op_from_string (const char *p,
       return POS_OP_MOD;
 
     case '`':
-      if (p[0] == '`' &&
-          p[1] == 'm' &&
-          p[2] == 'a' &&
-          p[3] == 'x' &&
-          p[4] == '`')
+      if (strncmp (p, "`max`", 5) == 0)
         {
           *len = 5;
           return POS_OP_MAX;
         }
-      else if (p[0] == '`' &&
-               p[1] == 'm' &&
-               p[2] == 'i' &&
-               p[3] == 'n' &&
-               p[4] == '`')
+      else if (strncmp (p, "`min`", 5) == 0)
         {
           *len = 5;
           return POS_OP_MIN;
@@ -2312,6 +2415,10 @@ pos_eval_get_variable (PosToken                  *t,
         *result = env->title_width;
       else if (t->d.v.name_quark == env->theme->quark_title_height)
         *result = env->title_height;
+      else if (t->d.v.name_quark == env->theme->quark_frame_x_center)
+        *result = env->frame_x_center;
+      else if (t->d.v.name_quark == env->theme->quark_frame_y_center)
+        *result = env->frame_y_center;
       else
         {
           g_set_error (err, META_THEME_ERROR,
@@ -2353,6 +2460,10 @@ pos_eval_get_variable (PosToken                  *t,
         *result = env->title_width;
       else if (strcmp (t->d.v.name, "title_height") == 0)
         *result = env->title_height;
+      else if (strcmp (t->d.v.name, "frame_x_center") == 0)
+        *result = env->frame_x_center;
+      else if (strcmp (t->d.v.name, "frame_y_center") == 0)
+        *result = env->frame_y_center;
       else
         {
           g_set_error (err, META_THEME_ERROR,
@@ -3002,6 +3113,8 @@ meta_draw_op_free (MetaDrawOp *op)
 
       meta_draw_spec_free (op->data.title.x);
       meta_draw_spec_free (op->data.title.y);
+      if (op->data.title.ellipsize_width)
+        meta_draw_spec_free (op->data.title.ellipsize_width);
       break;
 
     case META_DRAW_OP_LIST:
@@ -3485,6 +3598,8 @@ fill_env (MetaPositionExprEnv *env,
       env->right_width = info->fgeom->right_width;
       env->top_height = info->fgeom->top_height;
       env->bottom_height = info->fgeom->bottom_height;
+      env->frame_x_center = info->fgeom->width / 2 - logical_region.x;
+      env->frame_y_center = info->fgeom->height / 2 - logical_region.y;
     }
   else
     {
@@ -3492,6 +3607,8 @@ fill_env (MetaPositionExprEnv *env,
       env->right_width = 0;
       env->top_height = 0;
       env->bottom_height = 0;
+      env->frame_x_center = 0;
+      env->frame_y_center = 0;
     }
 
   env->mini_icon_width = info->mini_icon ? gdk_pixbuf_get_width (info->mini_icon) : 0;
@@ -3863,6 +3980,7 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
       if (info->title_layout)
         {
           int rx, ry;
+          PangoRectangle ink_rect, logical_rect;
 
           meta_color_spec_render (op->data.title.color_spec, style_gtk, &color);
           gdk_cairo_set_source_rgba (cr, &color);
@@ -3870,7 +3988,39 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
           rx = parse_x_position_unchecked (op->data.title.x, env);
           ry = parse_y_position_unchecked (op->data.title.y, env);
 
-          if (rx - env->rect.x + env->title_width >= env->rect.width)
+          if (op->data.title.ellipsize_width)
+            {
+              int ellipsize_width;
+              int right_bearing;
+
+              ellipsize_width = parse_x_position_unchecked (op->data.title.ellipsize_width, env);
+              /* HACK: parse_x_position_unchecked adds in env->rect.x, subtract out again */
+              ellipsize_width -= env->rect.x;
+
+              pango_layout_set_width (info->title_layout, -1);
+              pango_layout_get_pixel_extents (info->title_layout,
+                                              &ink_rect, &logical_rect);
+
+              /* Pango's idea of ellipsization is with respect to the logical rect.
+               * correct for this, by reducing the ellipsization width by the overflow
+               * of the un-ellipsized text on the right... it's always the visual
+               * right we want regardless of bidi, since since the X we pass in to
+               * cairo_move_to() is always the left edge of the line.
+               */
+              right_bearing = (ink_rect.x + ink_rect.width) - (logical_rect.x + logical_rect.width);
+              right_bearing = MAX (right_bearing, 0);
+
+              ellipsize_width -= right_bearing;
+              ellipsize_width = MAX (ellipsize_width, 0);
+
+              /* Only ellipsizing when necessary is a performance optimization -
+               * pango_layout_set_width() will force a relayout if it isn't the
+               * same as the current width of -1.
+               */
+              if (ellipsize_width < logical_rect.width)
+                pango_layout_set_width (info->title_layout, PANGO_SCALE * ellipsize_width);
+            }
+          else if (rx - env->rect.x + env->title_width >= env->rect.width)
           {
             const double alpha_margin = 30.0;
             int text_space = env->rect.x + env->rect.width -
@@ -3895,12 +4045,14 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
                                                           color.blue, 0);
             cairo_set_source(cr, linpat);
             cairo_pattern_destroy(linpat);
-          } else {
-            gdk_cairo_set_source_rgba (cr, &color);
           }
 
           cairo_move_to (cr, rx, ry);
           pango_cairo_show_layout (cr, info->title_layout);
+
+          /* Remove any ellipsization we might have set; will short-circuit
+           * if the width is already -1 */
+          pango_layout_set_width (info->title_layout, -1);
         }
       break;
 
@@ -4278,7 +4430,7 @@ map_button_state (MetaButtonType           button_type,
 
   switch (button_type)
     {
-    /* First hande functions, which map directly */
+    /* First handle functions, which map directly */
     case META_BUTTON_TYPE_SHADE:
     case META_BUTTON_TYPE_ABOVE:
     case META_BUTTON_TYPE_STICK:
@@ -4286,6 +4438,7 @@ map_button_state (MetaButtonType           button_type,
     case META_BUTTON_TYPE_UNABOVE:
     case META_BUTTON_TYPE_UNSTICK:
     case META_BUTTON_TYPE_MENU:
+    case META_BUTTON_TYPE_APPMENU:
     case META_BUTTON_TYPE_MINIMIZE:
     case META_BUTTON_TYPE_MAXIMIZE:
     case META_BUTTON_TYPE_CLOSE:
@@ -4293,6 +4446,7 @@ map_button_state (MetaButtonType           button_type,
 
     /* Map position buttons to the corresponding function */
     case META_BUTTON_TYPE_RIGHT_LEFT_BACKGROUND:
+    case META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND:
       if (fgeom->n_right_buttons > 0)
         function = fgeom->button_layout.right_buttons[0];
       break;
@@ -4305,6 +4459,7 @@ map_button_state (MetaButtonType           button_type,
         function = fgeom->button_layout.right_buttons[middle_bg_offset + 1];
       break;
     case META_BUTTON_TYPE_LEFT_LEFT_BACKGROUND:
+    case META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND:
       if (fgeom->n_left_buttons > 0)
         function = fgeom->button_layout.left_buttons[0];
       break;
@@ -4342,9 +4497,18 @@ get_button (MetaFrameStyle *style,
       parent = parent->parent;
     }
 
-  /* We fall back to middle button backgrounds if we don't
-   * have the ones on the sides
+  /* We fall back to the side buttons if we don't have
+   * single button backgrounds, and to middle button
+   * backgrounds if we don't have the ones on the sides
    */
+
+  if (op_list == NULL &&
+      type == META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND)
+    return get_button (style, META_BUTTON_TYPE_LEFT_LEFT_BACKGROUND, state);
+
+  if (op_list == NULL &&
+      type == META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND)
+    return get_button (style, META_BUTTON_TYPE_RIGHT_RIGHT_BACKGROUND, state);
 
   if (op_list == NULL &&
       (type == META_BUTTON_TYPE_LEFT_LEFT_BACKGROUND ||
@@ -4421,6 +4585,10 @@ get_button_rect (MetaButtonType           type,
       *rect = fgeom->left_right_background;
       break;
 
+    case META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND:
+      *rect = fgeom->left_single_background;
+      break;
+
     case META_BUTTON_TYPE_RIGHT_LEFT_BACKGROUND:
       *rect = fgeom->right_left_background;
       break;
@@ -4431,6 +4599,10 @@ get_button_rect (MetaButtonType           type,
 
     case META_BUTTON_TYPE_RIGHT_RIGHT_BACKGROUND:
       *rect = fgeom->right_right_background;
+      break;
+
+    case META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND:
+      *rect = fgeom->right_single_background;
       break;
 
     case META_BUTTON_TYPE_CLOSE:
@@ -4471,6 +4643,10 @@ get_button_rect (MetaButtonType           type,
 
     case META_BUTTON_TYPE_MENU:
       *rect = fgeom->menu_rect.visible;
+      break;
+
+    case META_BUTTON_TYPE_APPMENU:
+      *rect = fgeom->appmenu_rect.visible;
       break;
 
     case META_BUTTON_TYPE_LAST:
@@ -5047,6 +5223,8 @@ meta_theme_new (void)
   theme->quark_icon_height = g_quark_from_static_string ("icon_height");
   theme->quark_title_width = g_quark_from_static_string ("title_width");
   theme->quark_title_height = g_quark_from_static_string ("title_height");
+  theme->quark_frame_x_center = g_quark_from_static_string ("frame_x_center");
+  theme->quark_frame_y_center = g_quark_from_static_string ("frame_y_center");
   return theme;
 }
 
@@ -5142,7 +5320,7 @@ meta_theme_validate (MetaTheme *theme,
     }
 
   for (i = 0; i < (int)META_FRAME_TYPE_LAST; i++)
-    if (theme->style_sets_by_type[i] == NULL)
+    if (i != (int)META_FRAME_TYPE_ATTACHED && theme->style_sets_by_type[i] == NULL)
       {
         g_set_error (error, META_THEME_ERROR, META_THEME_ERROR_FAILED,
                      _("No frame style set for window type \"%s\" in theme \"%s\", add a <window type=\"%s\" style_set=\"whatever\"/> element"),
@@ -5220,7 +5398,10 @@ theme_get_style (MetaTheme     *theme,
 
   style_set = theme->style_sets_by_type[type];
 
-  /* Right now the parser forces a style set for all types,
+  if (style_set == NULL && type == META_FRAME_TYPE_ATTACHED)
+    style_set = theme->style_sets_by_type[META_FRAME_TYPE_BORDER];
+
+  /* Right now the parser forces a style set for all other types,
    * but this fallback code is here in case I take that out.
    */
   if (style_set == NULL)
@@ -5923,18 +6104,24 @@ meta_button_type_from_string (const char *str, MetaTheme *theme)
     return META_BUTTON_TYPE_MINIMIZE;
   else if (strcmp ("menu", str) == 0)
     return META_BUTTON_TYPE_MENU;
+  else if (strcmp ("appmenu", str) == 0)
+    return META_BUTTON_TYPE_APPMENU;
   else if (strcmp ("left_left_background", str) == 0)
     return META_BUTTON_TYPE_LEFT_LEFT_BACKGROUND;
   else if (strcmp ("left_middle_background", str) == 0)
     return META_BUTTON_TYPE_LEFT_MIDDLE_BACKGROUND;
   else if (strcmp ("left_right_background", str) == 0)
     return META_BUTTON_TYPE_LEFT_RIGHT_BACKGROUND;
+  else if (strcmp ("left_single_background", str) == 0)
+    return META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND;
   else if (strcmp ("right_left_background", str) == 0)
     return META_BUTTON_TYPE_RIGHT_LEFT_BACKGROUND;
   else if (strcmp ("right_middle_background", str) == 0)
     return META_BUTTON_TYPE_RIGHT_MIDDLE_BACKGROUND;
   else if (strcmp ("right_right_background", str) == 0)
     return META_BUTTON_TYPE_RIGHT_RIGHT_BACKGROUND;
+  else if (strcmp ("right_single_background", str) == 0)
+    return META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND;
   else
     return META_BUTTON_TYPE_LAST;
 }
@@ -5962,20 +6149,26 @@ meta_button_type_to_string (MetaButtonType type)
       return "unabove";
     case META_BUTTON_TYPE_UNSTICK:
       return "unstick";
-     case META_BUTTON_TYPE_MENU:
+    case META_BUTTON_TYPE_MENU:
       return "menu";
+    case META_BUTTON_TYPE_APPMENU:
+      return "appmenu";
     case META_BUTTON_TYPE_LEFT_LEFT_BACKGROUND:
       return "left_left_background";
     case META_BUTTON_TYPE_LEFT_MIDDLE_BACKGROUND:
       return "left_middle_background";
     case META_BUTTON_TYPE_LEFT_RIGHT_BACKGROUND:
       return "left_right_background";
+    case META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND:
+      return "left_single_background";
     case META_BUTTON_TYPE_RIGHT_LEFT_BACKGROUND:
       return "right_left_background";
     case META_BUTTON_TYPE_RIGHT_MIDDLE_BACKGROUND:
       return "right_middle_background";
     case META_BUTTON_TYPE_RIGHT_RIGHT_BACKGROUND:
       return "right_right_background";
+    case META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND:
+      return "right_single_background";
     case META_BUTTON_TYPE_LAST:
       break;
     }
@@ -6178,6 +6371,8 @@ meta_frame_type_from_string (const char *str)
     return META_FRAME_TYPE_MENU;
   else if (strcmp ("border", str) == 0)
     return META_FRAME_TYPE_BORDER;
+  else if (strcmp ("attached", str) == 0)
+    return META_FRAME_TYPE_ATTACHED;
 #if 0
   else if (strcmp ("toolbar", str) == 0)
     return META_FRAME_TYPE_TOOLBAR;
@@ -6203,6 +6398,8 @@ meta_frame_type_to_string (MetaFrameType type)
       return "menu";
     case META_FRAME_TYPE_BORDER:
       return "border";
+    case META_FRAME_TYPE_ATTACHED:
+      return "attached";
 #if 0
     case META_FRAME_TYPE_TOOLBAR:
       return "toolbar";
@@ -6821,7 +7018,7 @@ meta_theme_earliest_version_with_button (MetaButtonType type)
     case META_BUTTON_TYPE_RIGHT_LEFT_BACKGROUND:
     case META_BUTTON_TYPE_RIGHT_MIDDLE_BACKGROUND:
     case META_BUTTON_TYPE_RIGHT_RIGHT_BACKGROUND:
-      return 1;
+      return 1000;
 
     case META_BUTTON_TYPE_SHADE:
     case META_BUTTON_TYPE_ABOVE:
@@ -6829,10 +7026,17 @@ meta_theme_earliest_version_with_button (MetaButtonType type)
     case META_BUTTON_TYPE_UNSHADE:
     case META_BUTTON_TYPE_UNABOVE:
     case META_BUTTON_TYPE_UNSTICK:
-      return 2;
+      return 2000;
+
+    case META_BUTTON_TYPE_LEFT_SINGLE_BACKGROUND:
+    case META_BUTTON_TYPE_RIGHT_SINGLE_BACKGROUND:
+      return 3003;
+
+    case META_BUTTON_TYPE_APPMENU:
+      return 3005;
 
     default:
       meta_warning("Unknown button %d\n", type);
-      return 1;
+      return 1000;
     }
 }

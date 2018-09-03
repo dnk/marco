@@ -480,6 +480,7 @@ meta_frames_ensure_layout (MetaFrames  *frames,
 
       frame->layout = gtk_widget_create_pango_layout (widget, frame->title);
 
+      pango_layout_set_ellipsize (frame->layout, PANGO_ELLIPSIZE_END);
       pango_layout_set_auto_dir (frame->layout, FALSE);
 
       pango_layout_set_single_paragraph_mode (frame->layout, TRUE);
@@ -775,6 +776,39 @@ meta_frames_unflicker_bg (MetaFrames *frames,
   set_background_none (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow);
 }
 
+#ifdef HAVE_SHAPE
+static void
+apply_cairo_region_to_window (Display        *display,
+                              Window          xwindow,
+                              cairo_region_t *region,
+                              int             op)
+{
+  int n_rects, i;
+  XRectangle *rects;
+
+  n_rects = cairo_region_num_rectangles (region);
+  rects = g_new (XRectangle, n_rects);
+
+  for (i = 0; i < n_rects; i++)
+    {
+      cairo_rectangle_int_t rect;
+
+      cairo_region_get_rectangle (region, i, &rect);
+
+      rects[i].x = rect.x;
+      rects[i].y = rect.y;
+      rects[i].width = rect.width;
+      rects[i].height = rect.height;
+    }
+
+  XShapeCombineRectangles (display, xwindow,
+                           ShapeBounding, 0, 0, rects, n_rects,
+                           ShapeSet, YXBanded);
+
+  g_free (rects);
+}
+#endif
+
 void
 meta_frames_apply_shapes (MetaFrames *frames,
                           Window      xwindow,
@@ -789,6 +823,9 @@ meta_frames_apply_shapes (MetaFrames *frames,
   XRectangle xrect;
   Region corners_xregion;
   Region window_xregion;
+  cairo_rectangle_int_t rect;
+  cairo_region_t *corners_region;
+  cairo_region_t *window_region;
   gint scale;
 
   frame = meta_frames_lookup_window (frames, xwindow);
@@ -822,7 +859,7 @@ meta_frames_apply_shapes (MetaFrames *frames,
       return; /* nothing to do */
     }
 
-  corners_xregion = XCreateRegion ();
+  corners_region = cairo_region_create ();
   scale = gdk_window_get_scale_factor (frame->window);
 
   if (fgeom.top_left_corner_rounded_radius != 0)
@@ -834,12 +871,12 @@ meta_frames_apply_shapes (MetaFrames *frames,
       for (i=0; i<corner; i++)
         {
           const int width = floor(0.5 + radius - sqrt(radius*radius - (radius-(i+0.5))*(radius-(i+0.5))));
-          xrect.x = 0;
-          xrect.y = i;
-          xrect.width = width;
-          xrect.height = 1;
+          rect.x = 0;
+          rect.y = i;
+          rect.width = width;
+          rect.height = 1;
 
-          XUnionRectWithRegion (&xrect, corners_xregion, corners_xregion);
+          cairo_region_union_rectangle (corners_region, &rect);
         }
     }
 
@@ -852,12 +889,12 @@ meta_frames_apply_shapes (MetaFrames *frames,
       for (i=0; i<corner; i++)
         {
           const int width = floor(0.5 + radius - sqrt(radius*radius - (radius-(i+0.5))*(radius-(i+0.5))));
-          xrect.x = new_window_width - width;
-          xrect.y = i;
-          xrect.width = width;
-          xrect.height = 1;
+          rect.x = new_window_width - width;
+          rect.y = i;
+          rect.width = width;
+          rect.height = 1;
 
-          XUnionRectWithRegion (&xrect, corners_xregion, corners_xregion);
+          cairo_region_union_rectangle (corners_region, &rect);
         }
     }
 
@@ -870,12 +907,12 @@ meta_frames_apply_shapes (MetaFrames *frames,
       for (i=0; i<corner; i++)
         {
           const int width = floor(0.5 + radius - sqrt(radius*radius - (radius-(i+0.5))*(radius-(i+0.5))));
-          xrect.x = 0;
-          xrect.y = new_window_height - i - 1;
-          xrect.width = width;
-          xrect.height = 1;
+          rect.x = 0;
+          rect.y = new_window_height - i - 1;
+          rect.width = width;
+          rect.height = 1;
 
-          XUnionRectWithRegion (&xrect, corners_xregion, corners_xregion);
+          cairo_region_union_rectangle (corners_region, &rect);
         }
     }
 
@@ -888,27 +925,27 @@ meta_frames_apply_shapes (MetaFrames *frames,
       for (i=0; i<corner; i++)
         {
           const int width = floor(0.5 + radius - sqrt(radius*radius - (radius-(i+0.5))*(radius-(i+0.5))));
-          xrect.x = new_window_width - width;
-          xrect.y = new_window_height - i - 1;
-          xrect.width = width;
-          xrect.height = 1;
+          rect.x = new_window_width - width;
+          rect.y = new_window_height - i - 1;
+          rect.width = width;
+          rect.height = 1;
 
-          XUnionRectWithRegion (&xrect, corners_xregion, corners_xregion);
+          cairo_region_union_rectangle (corners_region, &rect);
         }
     }
 
-  window_xregion = XCreateRegion ();
+  window_region = cairo_region_create ();
 
-  xrect.x = 0;
-  xrect.y = 0;
-  xrect.width = new_window_width;
-  xrect.height = new_window_height;
+  rect.x = 0;
+  rect.y = 0;
+  rect.width = new_window_width;
+  rect.height = new_window_height;
 
-  XUnionRectWithRegion (&xrect, window_xregion, window_xregion);
+  cairo_region_union_rectangle (window_region, &rect);
 
-  XSubtractRegion (window_xregion, corners_xregion, window_xregion);
+  cairo_region_subtract (window_region, corners_region);
 
-  XDestroyRegion (corners_xregion);
+  cairo_region_destroy (corners_region);
 
   if (window_has_shape)
     {
@@ -921,7 +958,7 @@ meta_frames_apply_shapes (MetaFrames *frames,
       XSetWindowAttributes attrs;
       Window shape_window;
       Window client_window;
-      Region client_xregion;
+      cairo_region_t *client_region;
       GdkScreen *screen;
       int screen_number;
 
@@ -961,21 +998,21 @@ meta_frames_apply_shapes (MetaFrames *frames,
       /* Punch the client area out of the normal frame shape,
        * then union it with the shape_window's existing shape
        */
-      client_xregion = XCreateRegion ();
+      client_region = cairo_region_create ();
 
-      xrect.x = fgeom.left_width;
-      xrect.y = fgeom.top_height;
-      xrect.width = new_window_width - fgeom.right_width - xrect.x;
-      xrect.height = new_window_height - fgeom.bottom_height - xrect.y;
+      rect.x = fgeom.left_width;
+      rect.y = fgeom.top_height;
+      rect.width = new_window_width - fgeom.right_width - rect.x;
+      rect.height = new_window_height - fgeom.bottom_height - rect.y;
 
-      XUnionRectWithRegion (&xrect, client_xregion, client_xregion);
+      cairo_region_union_rectangle (client_region, &rect);
 
-      XSubtractRegion (window_xregion, client_xregion, window_xregion);
+      cairo_region_subtract (window_region, client_region);
 
-      XDestroyRegion (client_xregion);
+      cairo_region_destroy (client_region);
 
-      XShapeCombineRegion (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), shape_window,
-                           ShapeBounding, 0, 0, window_xregion, ShapeUnion);
+      apply_cairo_region_to_window (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), shape_window,
+                                    window_region, ShapeUnion);
 
       /* Now copy shape_window shape to the real frame */
       XShapeCombineShape (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow, ShapeBounding,
@@ -994,13 +1031,13 @@ meta_frames_apply_shapes (MetaFrames *frames,
                   "Frame 0x%lx has shaped corners\n",
                   frame->xwindow);
 
-      XShapeCombineRegion (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
-                           ShapeBounding, 0, 0, window_xregion, ShapeSet);
+      apply_cairo_region_to_window (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
+                                    window_region, ShapeSet);
     }
 
   frame->shape_applied = TRUE;
 
-  XDestroyRegion (window_xregion);
+  cairo_region_destroy (window_region);
 #endif /* HAVE_SHAPE */
 }
 
@@ -1110,6 +1147,9 @@ show_tip_now (MetaFrames *frames)
       break;
     case META_FRAME_CONTROL_MENU:
       tiptext = _("Window Menu");
+      break;
+    case META_FRAME_CONTROL_APPMENU:
+      tiptext = _("Window App Menu");
       break;
     case META_FRAME_CONTROL_MINIMIZE:
       tiptext = _("Minimize Window");
@@ -1461,6 +1501,9 @@ meta_frames_button_press_event (GtkWidget      *widget,
         case META_FRAME_CONTROL_MENU:
           op = META_GRAB_OP_CLICKING_MENU;
           break;
+        case META_FRAME_CONTROL_APPMENU:
+          op = META_GRAB_OP_CLICKING_APPMENU;
+          break;
         case META_FRAME_CONTROL_SHADE:
           op = META_GRAB_OP_CLICKING_SHADE;
           break;
@@ -1725,6 +1768,7 @@ meta_frames_button_release_event    (GtkWidget           *widget,
           break;
 
         case META_GRAB_OP_CLICKING_MENU:
+        case META_GRAB_OP_CLICKING_APPMENU:
           meta_core_end_grab_op (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), event->time);
           break;
 
@@ -1811,6 +1855,8 @@ meta_frames_update_prelit_control (MetaFrames      *frames,
       break;
     case META_FRAME_CONTROL_MENU:
       break;
+    case META_FRAME_CONTROL_APPMENU:
+      break;
     case META_FRAME_CONTROL_MINIMIZE:
       break;
     case META_FRAME_CONTROL_MAXIMIZE:
@@ -1863,6 +1909,7 @@ meta_frames_update_prelit_control (MetaFrames      *frames,
   switch (control)
     {
     case META_FRAME_CONTROL_MENU:
+    case META_FRAME_CONTROL_APPMENU:
     case META_FRAME_CONTROL_MINIMIZE:
     case META_FRAME_CONTROL_MAXIMIZE:
     case META_FRAME_CONTROL_DELETE:
@@ -1916,6 +1963,7 @@ meta_frames_motion_notify_event     (GtkWidget           *widget,
   switch (grab_op)
     {
     case META_GRAB_OP_CLICKING_MENU:
+    case META_GRAB_OP_CLICKING_APPMENU:
     case META_GRAB_OP_CLICKING_DELETE:
     case META_GRAB_OP_CLICKING_MINIMIZE:
     case META_GRAB_OP_CLICKING_MAXIMIZE:
@@ -1946,6 +1994,8 @@ meta_frames_motion_notify_event     (GtkWidget           *widget,
         control = get_control (frames, frame, x, y);
         if (! ((control == META_FRAME_CONTROL_MENU &&
                 grab_op == META_GRAB_OP_CLICKING_MENU) ||
+               (control == META_FRAME_CONTROL_APPMENU &&
+                grab_op == META_GRAB_OP_CLICKING_APPMENU) ||
                (control == META_FRAME_CONTROL_DELETE &&
                 grab_op == META_GRAB_OP_CLICKING_DELETE) ||
                (control == META_FRAME_CONTROL_MINIMIZE &&
@@ -2347,6 +2397,12 @@ meta_frames_paint_to_drawable (MetaFrames   *frames,
       else
         button_states[META_BUTTON_TYPE_MENU] = META_BUTTON_STATE_PRELIGHT;
       break;
+    case META_FRAME_CONTROL_APPMENU:
+      if (grab_op == META_GRAB_OP_CLICKING_MENU)
+        button_states[META_BUTTON_TYPE_APPMENU] = META_BUTTON_STATE_PRESSED;
+      else
+        button_states[META_BUTTON_TYPE_APPMENU] = META_BUTTON_STATE_PRELIGHT;
+      break;
     case META_FRAME_CONTROL_MINIMIZE:
       if (grab_op == META_GRAB_OP_CLICKING_MINIMIZE)
         button_states[META_BUTTON_TYPE_MINIMIZE] = META_BUTTON_STATE_PRESSED;
@@ -2544,6 +2600,9 @@ control_rect (MetaFrameControl control,
     case META_FRAME_CONTROL_MENU:
       rect = &fgeom->menu_rect.visible;
       break;
+    case META_FRAME_CONTROL_APPMENU:
+      rect = &fgeom->appmenu_rect.visible;
+      break;
     case META_FRAME_CONTROL_MINIMIZE:
       rect = &fgeom->min_rect.visible;
       break;
@@ -2629,6 +2688,9 @@ get_control (MetaFrames *frames,
 
   if (POINT_IN_RECT (x, y, fgeom.menu_rect.clickable))
     return META_FRAME_CONTROL_MENU;
+
+  if (POINT_IN_RECT (x, y, fgeom.appmenu_rect.clickable))
+    return META_FRAME_CONTROL_APPMENU;
 
   meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
                  META_CORE_GET_FRAME_FLAGS, &flags,
